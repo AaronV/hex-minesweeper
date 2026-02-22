@@ -353,3 +353,40 @@ export function toggleFlag(previous: GameState, index: number): GameState {
   const status: GameStatus = checkWin(cells) ? 'won' : 'playing'
   return { ...previous, cells, status }
 }
+
+export function chordReveal(previous: GameState, index: number): GameState {
+  if (previous.status !== 'playing') return previous
+  const target = previous.cells[index]
+  if (!target || !target.revealed || target.mine || target.adjacentMines === 0) return previous
+
+  const neighbors = getNeighbors(index, previous.rows, previous.cols)
+  const flaggedCount = neighbors.filter((neighbor) => previous.cells[neighbor].flagged).length
+  if (flaggedCount !== target.adjacentMines) return previous
+
+  const cells = previous.cells.map((cell) => ({ ...cell }))
+
+  for (const neighbor of neighbors) {
+    const cell = cells[neighbor]
+    if (cell.revealed || cell.flagged) continue
+
+    if (cell.mine) {
+      for (const mineCell of cells) {
+        if (mineCell.mine) mineCell.revealed = true
+      }
+      cell.exploded = true
+      return { ...previous, cells, status: 'lost' }
+    }
+
+    revealCellRegion(cells, previous.rows, previous.cols, neighbor)
+  }
+
+  const status: GameStatus = checkWin(cells) ? 'won' : 'playing'
+  return { ...previous, cells, status }
+}
+
+export function applyRightClick(previous: GameState, index: number): GameState {
+  const target = previous.cells[index]
+  if (!target) return previous
+  if (target.revealed) return chordReveal(previous, index)
+  return toggleFlag(previous, index)
+}

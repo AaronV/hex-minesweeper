@@ -2,13 +2,13 @@ import { useCallback, useMemo, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel } from './components/ControlPanel'
 import {
+  applyRightClick,
   DEFAULT_SETTINGS,
   getMineTargetFromSettings,
   makeGame,
   normalizeSettings,
   randomSeed,
   revealCell,
-  toggleFlag,
   type GenerationSettings,
 } from './game'
 
@@ -28,8 +28,8 @@ function App() {
     setGame((previous) => revealCell(previous, index))
   }, [])
 
-  const onToggleFlag = useCallback((index: number) => {
-    setGame((previous) => toggleFlag(previous, index))
+  const onRightClick = useCallback((index: number) => {
+    setGame((previous) => applyRightClick(previous, index))
   }, [])
 
   const remainingFlags = useMemo(
@@ -50,7 +50,7 @@ function App() {
         onGenerateLevel={onGenerateLevel}
         onSettingsChange={onSettingsChange}
       />
-      <BoardCanvas game={game} onReveal={onReveal} onToggleFlag={onToggleFlag} />
+      <BoardCanvas game={game} onReveal={onReveal} onRightClick={onRightClick} />
     </>
   )
 }

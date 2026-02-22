@@ -1,10 +1,17 @@
 import type { GameState } from './game'
+import { getNeighbors } from './game'
 
 const SQRT3 = Math.sqrt(3)
 
 export interface BoardLayout {
   centers: Array<{ x: number; y: number }>
   radius: number
+}
+
+export interface CameraState {
+  zoom: number
+  panX: number
+  panY: number
 }
 
 function computeLayout(width: number, height: number, rows: number, cols: number): BoardLayout {
@@ -88,9 +95,33 @@ function drawMine(
   ctx.stroke()
 }
 
-const numberColors = ['', '#93c5fd', '#86efac', '#fca5a5', '#fcd34d', '#c4b5fd', '#67e8f9']
+const numberColors = ['', '#2563eb', '#16a34a', '#dc2626', '#b45309', '#7c3aed', '#0891b2']
 
-export function drawGameBoard(canvas: HTMLCanvasElement, game: GameState): BoardLayout | null {
+function toScreen(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  camera: CameraState,
+): { x: number; y: number } {
+  return {
+    x: (x - width / 2) * camera.zoom + width / 2 + camera.panX,
+    y: (y - height / 2) * camera.zoom + height / 2 + camera.panY,
+  }
+}
+
+function hasActionableUnknownNeighbors(game: GameState, index: number): boolean {
+  for (const neighbor of getNeighbors(index, game.rows, game.cols)) {
+    if (!game.cells[neighbor].revealed && !game.cells[neighbor].flagged) return true
+  }
+  return false
+}
+
+export function drawGameBoard(
+  canvas: HTMLCanvasElement,
+  game: GameState,
+  camera: CameraState,
+): BoardLayout | null {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
 
@@ -102,7 +133,7 @@ export function drawGameBoard(canvas: HTMLCanvasElement, game: GameState): Board
 
   const { width, height } = rect
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = '#020617'
+  ctx.fillStyle = '#f8fafc'
   ctx.fillRect(0, 0, width, height)
 
   const layout = computeLayout(width, height, game.rows, game.cols)
@@ -115,37 +146,43 @@ export function drawGameBoard(canvas: HTMLCanvasElement, game: GameState): Board
     const showMine = (game.status === 'lost' && cell.mine) || (cell.revealed && cell.mine)
     const hidden = !cell.revealed
 
-    let fill = 'rgba(10, 16, 30, 0.98)'
-    let stroke = 'rgba(148, 163, 184, 0.16)'
+    let fill = 'rgba(240, 245, 252, 0.98)'
+    let stroke = 'rgba(148, 163, 184, 0.38)'
 
     if (hidden) {
-      fill = cell.flagged ? 'rgba(30, 41, 59, 0.96)' : 'rgba(9, 14, 28, 0.98)'
-      stroke = cell.flagged ? 'rgba(148, 163, 184, 0.38)' : 'rgba(148, 163, 184, 0.18)'
+      fill = cell.flagged ? 'rgba(219, 234, 254, 0.95)' : 'rgba(226, 232, 240, 0.92)'
+      stroke = cell.flagged ? 'rgba(59, 130, 246, 0.52)' : 'rgba(148, 163, 184, 0.44)'
     } else if (cell.mine) {
-      fill = cell.exploded ? 'rgba(127, 29, 29, 0.9)' : 'rgba(69, 10, 10, 0.88)'
-      stroke = 'rgba(248, 113, 113, 0.55)'
-    } else if (cell.start) {
-      fill = 'rgba(15, 30, 46, 0.98)'
-      stroke = 'rgba(125, 211, 252, 0.35)'
+      fill = cell.exploded ? 'rgba(254, 226, 226, 0.97)' : 'rgba(254, 242, 242, 0.94)'
+      stroke = 'rgba(239, 68, 68, 0.6)'
     } else {
-      fill = 'rgba(15, 23, 42, 0.96)'
-      stroke = 'rgba(148, 163, 184, 0.24)'
+      fill = 'rgba(241, 245, 249, 0.96)'
+      stroke = 'rgba(148, 163, 184, 0.45)'
     }
 
-    drawHex(ctx, center.x, center.y, layout.radius - 0.8, fill, stroke)
+    const position = toScreen(center.x, center.y, width, height, camera)
+    const drawRadius = layout.radius * camera.zoom - 0.8
+    if (drawRadius < 4) continue
+    drawHex(ctx, position.x, position.y, drawRadius, fill, stroke)
 
     if (cell.flagged && hidden) {
-      drawFlag(ctx, center.x, center.y, layout.radius)
+      drawFlag(ctx, position.x, position.y, drawRadius)
     } else if (showMine) {
-      drawMine(ctx, center.x, center.y, layout.radius, cell.exploded)
-    } else if (cell.revealed && !cell.mine && cell.adjacentMines > 0) {
-      const fontSize = Math.max(11, layout.radius * 0.55)
+      drawMine(ctx, position.x, position.y, drawRadius, cell.exploded)
+    } else if (
+      cell.revealed &&
+      !cell.mine &&
+      cell.adjacentMines > 0 &&
+      hasActionableUnknownNeighbors(game, index)
+    ) {
+      const fontSize = Math.max(9, drawRadius * 0.55)
       ctx.fillStyle = numberColors[cell.adjacentMines] ?? '#e2e8f0'
       ctx.font = `600 ${fontSize}px "Avenir Next", sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(String(cell.adjacentMines), center.x, center.y + 1)
+      ctx.fillText(String(cell.adjacentMines), position.x, position.y + 1)
     }
+
   }
 
   return layout
@@ -159,11 +196,20 @@ export function pointInHex(px: number, py: number, cx: number, cy: number, radiu
   return SQRT3 * dx + dy <= SQRT3 * radius + 0.0001
 }
 
-export function findCellAtPoint(x: number, y: number, layout: BoardLayout | null): number {
+export function findCellAtPoint(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  layout: BoardLayout | null,
+  camera: CameraState,
+): number {
   if (!layout) return -1
+  const boardX = ((x - camera.panX - width / 2) / camera.zoom) + width / 2
+  const boardY = ((y - camera.panY - height / 2) / camera.zoom) + height / 2
   for (let index = 0; index < layout.centers.length; index += 1) {
     const center = layout.centers[index]
-    if (pointInHex(x, y, center.x, center.y, layout.radius - 0.8)) return index
+    if (pointInHex(boardX, boardY, center.x, center.y, layout.radius - 0.8)) return index
   }
   return -1
 }

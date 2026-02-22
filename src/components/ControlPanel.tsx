@@ -18,9 +18,9 @@ export function ControlPanel({
   onSettingsChange,
 }: ControlPanelProps) {
   return (
-    <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-600/60 bg-slate-900/88 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
+    <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between">
-        <h1 className="text-sm font-semibold tracking-wide text-slate-100">Hex Minesweeper</h1>
+        <h1 className="text-sm font-semibold tracking-wide text-slate-900">Hex Minesweeper</h1>
         <button
           type="button"
           onClick={onGenerateLevel}
@@ -92,9 +92,9 @@ export function ControlPanel({
         </label>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-300">
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
         <span>Status</span>
-        <span className="text-right font-semibold text-slate-100">
+        <span className="text-right font-semibold text-slate-900">
           {game.status === 'playing' ? 'Playing' : game.status === 'won' ? 'Won' : 'Lost'}
         </span>
         <span>Mines</span>
@@ -106,6 +106,10 @@ export function ControlPanel({
         <span>Seed</span>
         <span className="truncate text-right">{game.seed}</span>
       </div>
+
+      <p className="mt-3 text-[11px] text-slate-500">
+        Controls: Left click to reveal, right click to flag, drag to pan, wheel to zoom.
+      </p>
     </div>
   )
 }
