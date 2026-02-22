@@ -303,11 +303,7 @@ function generateActiveMask(
     const carved = carveMirroredVoids(raw, rows, cols, settings.propagation, random)
     return enforceConnectivity(carved, rows, cols)
   }
-  return enforceConnectivity(
-    generateSnowflakeMask(rows, cols, settings.propagation, settings.snowflakeArms),
-    rows,
-    cols,
-  )
+  return generateSnowflakeMask(rows, cols, settings.propagation, settings.snowflakeArms)
 }
 
 function ensureMinimumActiveCells(
@@ -375,15 +371,14 @@ function difference(source: number[], toRemove: number[]): number[] {
   return source.filter((value) => !removeSet.has(value))
 }
 
-function computeSafeStarts(
+function deterministicSolveFromStarts(
   truth: CellTruth[],
   rows: number,
   cols: number,
   initialStarts: Set<number>,
-): Set<number> {
+): boolean {
   const revealed = new Array(truth.length).fill(false)
   const flagged = new Array(truth.length).fill(false)
-  const safeStarts = new Set(initialStarts)
 
   for (const start of initialStarts) revealed[start] = true
 
@@ -477,15 +472,10 @@ function computeSafeStarts(
       }
     }
 
-    if (progress) continue
-
-    const hintIndex = truth.findIndex((cell, index) => cell.active && !cell.mine && !revealed[index])
-    if (hintIndex === -1) break
-    revealed[hintIndex] = true
-    safeStarts.add(hintIndex)
+    if (!progress) break
   }
 
-  return safeStarts
+  return allSafeRevealed()
 }
 
 function revealCellRegion(cells: CellState[], rows: number, cols: number, startIndex: number): void {
@@ -530,23 +520,58 @@ export function makeGame(settings: GenerationSettings, seed: number): GameState 
     activeMask = generateActiveMask(normalized, rows, cols, random)
     if (activeMask.filter(Boolean).length >= 12) break
   }
-  activeMask = ensureMinimumActiveCells(activeMask, rows, cols, 12)
+  if (normalized.mapShape === 'rorschach') {
+    activeMask = ensureMinimumActiveCells(activeMask, rows, cols, 12)
+  }
   const activeIndices = allIndices.filter((index) => activeMask[index])
 
   const mineCount = clamp(Math.round((activeIndices.length * minePercent) / 100), 1, activeIndices.length - 1)
-  const minSafeStarts = 1
-  const mineIndices = sampleWithoutReplacement(activeIndices, mineCount, random)
-  const mineSet = new Set(mineIndices)
-  const truth = createTruthBoard(rows, cols, mineSet, activeMask)
-  const safeCandidates = activeIndices.filter((index) => !mineSet.has(index))
-  const initialStarts = new Set(sampleWithoutReplacement(safeCandidates, minSafeStarts, random))
-  const safeStarts = computeSafeStarts(truth, rows, cols, initialStarts)
+  let mineSet = new Set<number>()
+  let truth: CellTruth[] = []
+  let startIndex = -1
+  const centerRow = Math.floor(rows / 2)
+  const centerCol = Math.floor(cols / 2)
+
+  for (let attempt = 0; attempt < 320; attempt += 1) {
+    const mineIndices = sampleWithoutReplacement(activeIndices, mineCount, random)
+    mineSet = new Set(mineIndices)
+    truth = createTruthBoard(rows, cols, mineSet, activeMask)
+    const safeCandidates = activeIndices.filter((index) => !mineSet.has(index))
+    if (safeCandidates.length === 0) continue
+
+    const ranked = [...safeCandidates].sort((a, b) => {
+      const ar = Math.floor(a / cols)
+      const ac = a % cols
+      const br = Math.floor(b / cols)
+      const bc = b % cols
+      const da = Math.hypot(ar - centerRow, ac - centerCol)
+      const db = Math.hypot(br - centerRow, bc - centerCol)
+      return da - db
+    })
+    const topBand = ranked.slice(0, Math.max(1, Math.floor(ranked.length * 0.35)))
+    const [candidate] = sampleWithoutReplacement(topBand, 1, random)
+    if (candidate === undefined) continue
+
+    const starts = new Set<number>([candidate])
+    if (deterministicSolveFromStarts(truth, rows, cols, starts)) {
+      startIndex = candidate
+      break
+    }
+  }
+
+  if (startIndex < 0) {
+    const mineIndices = sampleWithoutReplacement(activeIndices, mineCount, random)
+    mineSet = new Set(mineIndices)
+    truth = createTruthBoard(rows, cols, mineSet, activeMask)
+    const safeCandidates = activeIndices.filter((index) => !mineSet.has(index))
+    startIndex = safeCandidates[0] ?? activeIndices[0]
+  }
 
   const cells: CellState[] = truth.map((cell, index) => ({
     ...cell,
-    revealed: cell.active ? safeStarts.has(index) : false,
+    revealed: false,
     flagged: false,
-    start: cell.active ? safeStarts.has(index) : false,
+    start: cell.active ? index === startIndex : false,
     exploded: false,
   }))
 
@@ -554,7 +579,7 @@ export function makeGame(settings: GenerationSettings, seed: number): GameState 
     cols,
     rows,
     mineCount,
-    safeStartCount: safeStarts.size,
+    safeStartCount: 1,
     activeCellCount: activeIndices.length,
     seed,
     status: 'playing',
@@ -572,6 +597,8 @@ export function revealCell(previous: GameState, index: number): GameState {
   if (previous.status !== 'playing') return previous
   const target = previous.cells[index]
   if (!target || !target.active || target.revealed || target.flagged) return previous
+  const hasAnyRevealed = previous.cells.some((cell) => cell.active && cell.revealed)
+  if (!hasAnyRevealed && !target.start) return previous
 
   const cells = previous.cells.map((cell) => ({ ...cell }))
   if (cells[index].mine) {

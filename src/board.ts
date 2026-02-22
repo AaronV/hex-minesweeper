@@ -182,6 +182,19 @@ export function drawGameBoard(
       ctx.fillText(String(cell.adjacentMines), position.x, position.y + 1)
     }
 
+    if (cell.start && hidden && !cell.flagged) {
+      ctx.beginPath()
+      ctx.arc(position.x, position.y, Math.max(4, drawRadius * 0.24), 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)'
+      ctx.lineWidth = Math.max(1.5, drawRadius * 0.08)
+      ctx.stroke()
+
+      ctx.beginPath()
+      ctx.arc(position.x, position.y, Math.max(1.8, drawRadius * 0.09), 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(22, 163, 74, 0.95)'
+      ctx.fill()
+    }
+
   }
 
   return layout

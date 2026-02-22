@@ -119,8 +119,8 @@ export function ControlPanel({
         <span className="text-right">{game.activeCellCount}</span>
         <span>Flags Left</span>
         <span className="text-right">{remainingFlags}</span>
-        <span>Safe Starts Used</span>
-        <span className="text-right">{game.safeStartCount}</span>
+        <span>Start Cell</span>
+        <span className="text-right">Marked safe</span>
         <span>Seed</span>
         <span className="truncate text-right">{game.seed}</span>
       </div>
