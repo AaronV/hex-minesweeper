@@ -65,9 +65,9 @@ export function BoardCanvas({ game, onReveal, onRightClick }: BoardCanvasProps) 
       const rect = canvas.getBoundingClientRect()
       const x = clientX - rect.left
       const y = clientY - rect.top
-      return findCellAtPoint(x, y, rect.width, rect.height, layoutRef.current, camera)
+      return findCellAtPoint(x, y, rect.width, rect.height, layoutRef.current, camera, game)
     },
-    [camera],
+    [camera, game],
   )
 
   const onPointerDown = useCallback(

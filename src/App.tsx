@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel } from './components/ControlPanel'
 import {
   applyRightClick,
   DEFAULT_SETTINGS,
-  getMineTargetFromSettings,
   makeGame,
   normalizeSettings,
   randomSeed,
@@ -12,9 +11,23 @@ import {
   type GenerationSettings,
 } from './game'
 
+const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
+
+function loadInitialSettings(): GenerationSettings {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return DEFAULT_SETTINGS
+    const parsed = JSON.parse(raw) as Partial<GenerationSettings>
+    return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed })
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
 function App() {
-  const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_SETTINGS)
-  const [game, setGame] = useState(() => makeGame(DEFAULT_SETTINGS, randomSeed()))
+  const [settings, setSettings] = useState<GenerationSettings>(loadInitialSettings)
+  const [game, setGame] = useState(() => makeGame(loadInitialSettings(), randomSeed()))
 
   const onGenerateLevel = useCallback(() => {
     setGame(makeGame(settings, randomSeed()))
@@ -23,6 +36,14 @@ function App() {
   const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
     setSettings((previous) => normalizeSettings({ ...previous, ...partial }))
   }, [])
+
+  useEffect(() => {
+    setGame(makeGame(settings, randomSeed()))
+  }, [settings])
+
+  useEffect(() => {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  }, [settings])
 
   const onReveal = useCallback((index: number) => {
     setGame((previous) => revealCell(previous, index))
@@ -37,16 +58,12 @@ function App() {
     [game.cells, game.mineCount],
   )
 
-  const mineTarget = getMineTargetFromSettings(settings)
-  const maxSafeStarts = settings.cols * settings.rows - mineTarget
-
   return (
     <>
       <ControlPanel
         settings={settings}
         game={game}
         remainingFlags={remainingFlags}
-        maxSafeStarts={maxSafeStarts}
         onGenerateLevel={onGenerateLevel}
         onSettingsChange={onSettingsChange}
       />

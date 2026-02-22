@@ -1,10 +1,9 @@
-import type { GameState, GenerationSettings } from '../game'
+import type { GameState, GenerationSettings, MapShape } from '../game'
 
 interface ControlPanelProps {
   settings: GenerationSettings
   game: GameState
   remainingFlags: number
-  maxSafeStarts: number
   onGenerateLevel: () => void
   onSettingsChange: (partial: Partial<GenerationSettings>) => void
 }
@@ -13,7 +12,6 @@ export function ControlPanel({
   settings,
   game,
   remainingFlags,
-  maxSafeStarts,
   onGenerateLevel,
   onSettingsChange,
 }: ControlPanelProps) {
@@ -33,33 +31,65 @@ export function ControlPanel({
       <div className="grid gap-2 text-xs">
         <label className="block">
           <div className="mb-1 flex justify-between">
-            <span>Columns</span>
-            <span>{settings.cols}</span>
+            <span>Shape</span>
+            <span className="capitalize">{settings.mapShape}</span>
+          </div>
+          <select
+            value={settings.mapShape}
+            onChange={(event) => onSettingsChange({ mapShape: event.target.value as MapShape })}
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+          >
+            <option value="rorschach">Rorschach Mirror</option>
+            <option value="snowflake">Snowflake</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <div className="mb-1 flex justify-between">
+            <span>Map Size</span>
+            <span>{settings.mapSize}</span>
           </div>
           <input
             type="range"
-            min={6}
-            max={36}
-            value={settings.cols}
-            onChange={(event) => onSettingsChange({ cols: Number(event.target.value) })}
+            min={8}
+            max={24}
+            value={settings.mapSize}
+            onChange={(event) => onSettingsChange({ mapSize: Number(event.target.value) })}
             className="w-full"
           />
         </label>
 
         <label className="block">
           <div className="mb-1 flex justify-between">
-            <span>Rows</span>
-            <span>{settings.rows}</span>
+            <span>Propagation</span>
+            <span>{settings.propagation}</span>
           </div>
           <input
             type="range"
-            min={6}
-            max={28}
-            value={settings.rows}
-            onChange={(event) => onSettingsChange({ rows: Number(event.target.value) })}
+            min={20}
+            max={95}
+            value={settings.propagation}
+            onChange={(event) => onSettingsChange({ propagation: Number(event.target.value) })}
             className="w-full"
           />
         </label>
+
+        {settings.mapShape === 'snowflake' ? (
+          <label className="block">
+            <div className="mb-1 flex justify-between">
+              <span>Snowflake Arms</span>
+              <span>{settings.snowflakeArms}</span>
+            </div>
+            <input
+              type="range"
+              min={3}
+              max={6}
+              value={settings.snowflakeArms}
+              onChange={(event) => onSettingsChange({ snowflakeArms: Number(event.target.value) })}
+              className="w-full"
+            />
+          </label>
+        ) : null}
 
         <label className="block">
           <div className="mb-1 flex justify-between">
@@ -76,20 +106,6 @@ export function ControlPanel({
           />
         </label>
 
-        <label className="block">
-          <div className="mb-1 flex justify-between">
-            <span>Min Safe Starts</span>
-            <span>{settings.minSafeStarts}</span>
-          </div>
-          <input
-            type="range"
-            min={1}
-            max={Math.max(1, maxSafeStarts)}
-            value={Math.min(settings.minSafeStarts, Math.max(1, maxSafeStarts))}
-            onChange={(event) => onSettingsChange({ minSafeStarts: Number(event.target.value) })}
-            className="w-full"
-          />
-        </label>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
@@ -99,6 +115,8 @@ export function ControlPanel({
         </span>
         <span>Mines</span>
         <span className="text-right">{game.mineCount}</span>
+        <span>Active Cells</span>
+        <span className="text-right">{game.activeCellCount}</span>
         <span>Flags Left</span>
         <span className="text-right">{remainingFlags}</span>
         <span>Safe Starts Used</span>

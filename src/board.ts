@@ -44,7 +44,6 @@ function drawHex(
   y: number,
   radius: number,
   fill: string,
-  stroke: string,
 ): void {
   ctx.beginPath()
   for (let i = 0; i < 6; i += 1) {
@@ -56,10 +55,7 @@ function drawHex(
   }
   ctx.closePath()
   ctx.fillStyle = fill
-  ctx.strokeStyle = stroke
-  ctx.lineWidth = 1
   ctx.fill()
-  ctx.stroke()
 }
 
 function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number): void {
@@ -112,7 +108,13 @@ function toScreen(
 
 function hasActionableUnknownNeighbors(game: GameState, index: number): boolean {
   for (const neighbor of getNeighbors(index, game.rows, game.cols)) {
-    if (!game.cells[neighbor].revealed && !game.cells[neighbor].flagged) return true
+    if (
+      game.cells[neighbor].active &&
+      !game.cells[neighbor].revealed &&
+      !game.cells[neighbor].flagged
+    ) {
+      return true
+    }
   }
   return false
 }
@@ -142,28 +144,25 @@ export function drawGameBoard(
     const cell = game.cells[index]
     const center = layout.centers[index]
     if (!center) continue
+    if (!cell.active) continue
 
     const showMine = (game.status === 'lost' && cell.mine) || (cell.revealed && cell.mine)
     const hidden = !cell.revealed
 
-    let fill = 'rgba(240, 245, 252, 0.98)'
-    let stroke = 'rgba(148, 163, 184, 0.38)'
+    let fill = 'rgba(248, 250, 252, 1)'
 
     if (hidden) {
-      fill = cell.flagged ? 'rgba(219, 234, 254, 0.95)' : 'rgba(226, 232, 240, 0.92)'
-      stroke = cell.flagged ? 'rgba(59, 130, 246, 0.52)' : 'rgba(148, 163, 184, 0.44)'
+      fill = cell.flagged ? 'rgba(191, 219, 254, 0.98)' : 'rgba(203, 213, 225, 0.96)'
     } else if (cell.mine) {
-      fill = cell.exploded ? 'rgba(254, 226, 226, 0.97)' : 'rgba(254, 242, 242, 0.94)'
-      stroke = 'rgba(239, 68, 68, 0.6)'
+      fill = cell.exploded ? 'rgba(254, 202, 202, 0.98)' : 'rgba(254, 226, 226, 0.96)'
     } else {
-      fill = 'rgba(241, 245, 249, 0.96)'
-      stroke = 'rgba(148, 163, 184, 0.45)'
+      fill = 'rgba(248, 250, 252, 1)'
     }
 
     const position = toScreen(center.x, center.y, width, height, camera)
     const drawRadius = layout.radius * camera.zoom - 0.8
     if (drawRadius < 4) continue
-    drawHex(ctx, position.x, position.y, drawRadius, fill, stroke)
+    drawHex(ctx, position.x, position.y, drawRadius, fill)
 
     if (cell.flagged && hidden) {
       drawFlag(ctx, position.x, position.y, drawRadius)
@@ -203,11 +202,13 @@ export function findCellAtPoint(
   height: number,
   layout: BoardLayout | null,
   camera: CameraState,
+  game: GameState,
 ): number {
   if (!layout) return -1
   const boardX = ((x - camera.panX - width / 2) / camera.zoom) + width / 2
   const boardY = ((y - camera.panY - height / 2) / camera.zoom) + height / 2
   for (let index = 0; index < layout.centers.length; index += 1) {
+    if (!game.cells[index].active) continue
     const center = layout.centers[index]
     if (pointInHex(boardX, boardY, center.x, center.y, layout.radius - 0.8)) return index
   }

@@ -1,6 +1,8 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
+export type MapShape = 'rorschach' | 'snowflake'
 
 export interface CellTruth {
+  active: boolean
   mine: boolean
   adjacentMines: number
 }
@@ -13,10 +15,11 @@ export interface CellState extends CellTruth {
 }
 
 export interface GenerationSettings {
-  cols: number
-  rows: number
+  mapSize: number
   minePercent: number
-  minSafeStarts: number
+  mapShape: MapShape
+  propagation: number
+  snowflakeArms: number
 }
 
 export interface GameState {
@@ -24,16 +27,18 @@ export interface GameState {
   rows: number
   mineCount: number
   safeStartCount: number
+  activeCellCount: number
   seed: number
   status: GameStatus
   cells: CellState[]
 }
 
 export const DEFAULT_SETTINGS: GenerationSettings = {
-  cols: 16,
-  rows: 12,
+  mapSize: 14,
   minePercent: 20,
-  minSafeStarts: 1,
+  mapShape: 'rorschach',
+  propagation: 62,
+  snowflakeArms: 6,
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -100,31 +105,258 @@ function sampleWithoutReplacement(values: number[], count: number, random: () =>
   return pool.slice(0, limit)
 }
 
-export function normalizeSettings(settings: GenerationSettings): GenerationSettings {
-  const cols = clamp(Math.round(settings.cols), 6, 36)
-  const rows = clamp(Math.round(settings.rows), 6, 28)
-  const minePercent = clamp(Math.round(settings.minePercent), 8, 38)
-  const cellCount = cols * rows
-  const mineCount = clamp(Math.round((cellCount * minePercent) / 100), 1, cellCount - 1)
-  const safeMax = cellCount - mineCount
-  const minSafeStarts = clamp(Math.round(settings.minSafeStarts), 1, safeMax)
-  return { cols, rows, minePercent, minSafeStarts }
+function getGridDimensions(settings: GenerationSettings): { cols: number; rows: number } {
+  const size = settings.mapSize
+  if (settings.mapShape === 'rorschach') {
+    return { cols: size * 2 + 10, rows: size * 2 + 2 }
+  }
+  return { cols: size * 2 + 6, rows: size * 2 + 6 }
 }
 
-function createTruthBoard(rows: number, cols: number, mineSet: Set<number>): CellTruth[] {
+function estimateActiveRatio(settings: GenerationSettings): number {
+  if (settings.mapShape === 'rorschach') {
+    return clamp(0.28 + settings.propagation * 0.0038, 0.26, 0.66)
+  }
+  const armFactor = (settings.snowflakeArms - 3) * 0.028
+  return clamp(0.26 + armFactor + settings.propagation * 0.0034, 0.24, 0.78)
+}
+
+export function estimatePlayableCells(settings: GenerationSettings): number {
+  const { cols, rows } = getGridDimensions(settings)
+  const total = cols * rows
+  return Math.max(8, Math.round(total * estimateActiveRatio(settings)))
+}
+
+export function normalizeSettings(settings: GenerationSettings): GenerationSettings {
+  const mapSize = clamp(Math.round(settings.mapSize), 8, 24)
+  const minePercent = clamp(Math.round(settings.minePercent), 8, 38)
+  const mapShape: MapShape = settings.mapShape ?? 'rorschach'
+  const propagation = clamp(Math.round(settings.propagation), 20, 95)
+  const snowflakeArms = clamp(Math.round(settings.snowflakeArms), 3, 6)
+  const playableEstimate = estimatePlayableCells({
+    mapSize,
+    minePercent,
+    mapShape,
+    propagation,
+    snowflakeArms,
+  })
+  const mineCount = clamp(Math.round((playableEstimate * minePercent) / 100), 1, playableEstimate - 1)
+  void mineCount
+  return { mapSize, minePercent, mapShape, propagation, snowflakeArms }
+}
+
+function getCellPoint(row: number, col: number, cols: number, rows: number): { x: number; y: number } {
+  const x = col + (row % 2 === 0 ? 0.5 : 1) - cols / 2
+  const y = row * 0.8660254038 - (rows - 1) * 0.4330127019
+  return { x, y }
+}
+
+function generateRorschachMask(
+  rows: number,
+  cols: number,
+  propagation: number,
+  random: () => number,
+): boolean[] {
+  const total = rows * cols
+  const active = new Array<boolean>(total).fill(false)
+  const midCol = Math.floor((cols - 1) / 2)
+  const centerRow = Math.floor(rows / 2)
+  const centerLeft = getIndex(centerRow, midCol, cols)
+  const queue: number[] = [centerLeft]
+  const visited = new Set<number>()
+
+  while (queue.length > 0) {
+    const index = queue.shift()
+    if (index === undefined || visited.has(index)) continue
+    visited.add(index)
+
+    const row = Math.floor(index / cols)
+    const col = index % cols
+    if (col > midCol) continue
+
+    const { x, y } = getCellPoint(row, col, cols, rows)
+    const radius = Math.sqrt(x * x + y * y)
+    const radiusMax = Math.sqrt((cols / 2) ** 2 + (rows / 2) ** 2)
+    const radiusNorm = radius / radiusMax
+    const baseChance = propagation / 100
+    const chance = baseChance * 0.42 + (1 - radiusNorm) * 0.44 + random() * 0.24 - 0.38
+
+    if (chance > 0) {
+      active[index] = true
+      const mirrorCol = cols - 1 - col
+      active[getIndex(row, mirrorCol, cols)] = true
+    }
+
+    for (const neighbor of getNeighbors(index, rows, cols)) {
+      const neighborCol = neighbor % cols
+      if (neighborCol <= midCol && !visited.has(neighbor)) queue.push(neighbor)
+    }
+  }
+
+  return active
+}
+
+function carveMirroredVoids(
+  active: boolean[],
+  rows: number,
+  cols: number,
+  propagation: number,
+  random: () => number,
+): boolean[] {
+  const next = [...active]
+  const midCol = Math.floor((cols - 1) / 2)
+  const strength = 1 - propagation / 100
+  const voidCount = clamp(Math.round(2 + strength * 9), 2, 10)
+  const baseRadius = clamp(Math.round(1 + strength * 3), 1, 4)
+
+  for (let i = 0; i < voidCount; i += 1) {
+    const centerRow = Math.floor(random() * rows)
+    const centerCol = Math.floor(random() * (midCol + 1))
+    const radius = Math.max(1, baseRadius + (random() > 0.65 ? 1 : 0))
+
+    for (let row = centerRow - radius; row <= centerRow + radius; row += 1) {
+      if (row < 0 || row >= rows) continue
+      for (let col = centerCol - radius; col <= centerCol + radius; col += 1) {
+        if (col < 0 || col > midCol) continue
+
+        const distance = Math.hypot(row - centerRow, col - centerCol)
+        const cutoff = radius - 0.3 + random() * 0.65
+        if (distance > cutoff) continue
+
+        const leftIndex = getIndex(row, col, cols)
+        const mirrorCol = cols - 1 - col
+        const rightIndex = getIndex(row, mirrorCol, cols)
+        next[leftIndex] = false
+        next[rightIndex] = false
+      }
+    }
+  }
+
+  return next
+}
+
+function generateSnowflakeMask(
+  rows: number,
+  cols: number,
+  propagation: number,
+  arms: number,
+): boolean[] {
+  const total = rows * cols
+  const active = new Array<boolean>(total).fill(false)
+  const maxRadius = Math.sqrt((cols / 2) ** 2 + (rows / 2) ** 2)
+  const sector = (Math.PI * 2) / arms
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const index = getIndex(row, col, cols)
+      const { x, y } = getCellPoint(row, col, cols, rows)
+      const radius = Math.sqrt(x * x + y * y)
+      const radiusNorm = radius / maxRadius
+      if (radiusNorm > 1) continue
+
+      const angle = Math.atan2(y, x) + Math.PI
+      const inSector = (angle % sector) / sector
+      const spoke = 1 - Math.abs(inSector - 0.5) * 2
+      const chance =
+        (propagation / 100) * 0.48 +
+        spoke * 0.5 -
+        radiusNorm * 0.6 +
+        Math.sin(radiusNorm * 9 + inSector * 5.3) * 0.08 +
+        Math.cos(radiusNorm * 13 - inSector * 4.2) * 0.045 -
+        0.21
+
+      active[index] = chance > 0
+    }
+  }
+
+  return active
+}
+
+function enforceConnectivity(active: boolean[], rows: number, cols: number): boolean[] {
+  const seeds = active.map((value, index) => ({ value, index })).filter((entry) => entry.value)
+  if (seeds.length === 0) return active
+
+  const start = seeds[Math.floor(seeds.length / 2)].index
+  const connected = new Array(active.length).fill(false)
+  const queue = [start]
+
+  while (queue.length > 0) {
+    const index = queue.shift()
+    if (index === undefined || connected[index] || !active[index]) continue
+    connected[index] = true
+    for (const neighbor of getNeighbors(index, rows, cols)) {
+      if (!connected[neighbor] && active[neighbor]) queue.push(neighbor)
+    }
+  }
+
+  return connected
+}
+
+function generateActiveMask(
+  settings: GenerationSettings,
+  rows: number,
+  cols: number,
+  random: () => number,
+): boolean[] {
+  if (settings.mapShape === 'rorschach') {
+    const raw = generateRorschachMask(rows, cols, settings.propagation, random)
+    const carved = carveMirroredVoids(raw, rows, cols, settings.propagation, random)
+    return enforceConnectivity(carved, rows, cols)
+  }
+  return enforceConnectivity(
+    generateSnowflakeMask(rows, cols, settings.propagation, settings.snowflakeArms),
+    rows,
+    cols,
+  )
+}
+
+function ensureMinimumActiveCells(
+  activeMask: boolean[],
+  rows: number,
+  cols: number,
+  minimum: number,
+): boolean[] {
+  const currentCount = activeMask.filter(Boolean).length
+  if (currentCount >= minimum) return activeMask
+
+  const next = [...activeMask]
+  const center = getIndex(Math.floor(rows / 2), Math.floor(cols / 2), cols)
+  const queue = [center]
+  const visited = new Set<number>()
+
+  while (queue.length > 0 && next.filter(Boolean).length < minimum) {
+    const index = queue.shift()
+    if (index === undefined || visited.has(index)) continue
+    visited.add(index)
+    next[index] = true
+
+    for (const neighbor of getNeighbors(index, rows, cols)) {
+      if (!visited.has(neighbor)) queue.push(neighbor)
+    }
+  }
+
+  return next
+}
+
+function createTruthBoard(
+  rows: number,
+  cols: number,
+  mineSet: Set<number>,
+  activeMask: boolean[],
+): CellTruth[] {
   const total = rows * cols
   const truth: CellTruth[] = new Array(total)
 
   for (let index = 0; index < total; index += 1) {
-    const mine = mineSet.has(index)
-    truth[index] = { mine, adjacentMines: 0 }
+    const active = activeMask[index]
+    truth[index] = { active, mine: active && mineSet.has(index), adjacentMines: 0 }
   }
 
   for (let index = 0; index < total; index += 1) {
-    if (truth[index].mine) continue
+    if (!truth[index].active || truth[index].mine) continue
     let adjacent = 0
     for (const neighbor of getNeighbors(index, rows, cols)) {
-      if (truth[neighbor].mine) adjacent += 1
+      if (truth[neighbor].active && truth[neighbor].mine) adjacent += 1
     }
     truth[index].adjacentMines = adjacent
   }
@@ -155,15 +387,15 @@ function computeSafeStarts(
 
   for (const start of initialStarts) revealed[start] = true
 
-  const allSafeRevealed = () => truth.every((cell, index) => cell.mine || revealed[index])
+  const allSafeRevealed = () => truth.every((cell, index) => !cell.active || cell.mine || revealed[index])
 
   while (!allSafeRevealed()) {
     let progress = false
 
     for (let index = 0; index < truth.length; index += 1) {
-      if (!revealed[index] || truth[index].mine) continue
+      if (!truth[index].active || !revealed[index] || truth[index].mine) continue
 
-      const neighbors = getNeighbors(index, rows, cols)
+      const neighbors = getNeighbors(index, rows, cols).filter((neighbor) => truth[neighbor].active)
       const unknown = neighbors.filter((n) => !revealed[n] && !flagged[n])
       const flaggedCount = neighbors.filter((n) => flagged[n]).length
       const remainingMines = truth[index].adjacentMines - flaggedCount
@@ -188,8 +420,8 @@ function computeSafeStarts(
 
     const constraints: Array<{ unknown: number[]; remaining: number }> = []
     for (let index = 0; index < truth.length; index += 1) {
-      if (!revealed[index] || truth[index].mine) continue
-      const neighbors = getNeighbors(index, rows, cols)
+      if (!truth[index].active || !revealed[index] || truth[index].mine) continue
+      const neighbors = getNeighbors(index, rows, cols).filter((neighbor) => truth[neighbor].active)
       const unknown = neighbors.filter((n) => !revealed[n] && !flagged[n]).sort((a, b) => a - b)
       if (unknown.length === 0) continue
       const flaggedCount = neighbors.filter((n) => flagged[n]).length
@@ -247,7 +479,7 @@ function computeSafeStarts(
 
     if (progress) continue
 
-    const hintIndex = truth.findIndex((cell, index) => !cell.mine && !revealed[index])
+    const hintIndex = truth.findIndex((cell, index) => cell.active && !cell.mine && !revealed[index])
     if (hintIndex === -1) break
     revealed[hintIndex] = true
     safeStarts.add(hintIndex)
@@ -264,13 +496,13 @@ function revealCellRegion(cells: CellState[], rows: number, cols: number, startI
     if (current === undefined) continue
 
     const cell = cells[current]
-    if (cell.revealed || cell.flagged) continue
+    if (!cell.active || cell.revealed || cell.flagged) continue
     cell.revealed = true
     if (cell.adjacentMines > 0 || cell.mine) continue
 
     for (const neighbor of getNeighbors(current, rows, cols)) {
       const neighborCell = cells[neighbor]
-      if (!neighborCell.revealed && !neighborCell.flagged && !neighborCell.mine) {
+      if (neighborCell.active && !neighborCell.revealed && !neighborCell.flagged && !neighborCell.mine) {
         queue.push(neighbor)
       }
     }
@@ -278,31 +510,43 @@ function revealCellRegion(cells: CellState[], rows: number, cols: number, startI
 }
 
 export function checkWin(cells: CellState[]): boolean {
-  const allSafeRevealed = cells.every((cell) => cell.mine || cell.revealed)
-  const allMinesFlagged = cells.every((cell) => (cell.mine ? cell.flagged : !cell.flagged))
+  const allSafeRevealed = cells.every((cell) => !cell.active || cell.mine || cell.revealed)
+  const allMinesFlagged = cells.every((cell) =>
+    !cell.active ? true : cell.mine ? cell.flagged : !cell.flagged,
+  )
   return allSafeRevealed && allMinesFlagged
 }
 
 export function makeGame(settings: GenerationSettings, seed: number): GameState {
   const normalized = normalizeSettings(settings)
-  const { cols, rows, minePercent, minSafeStarts } = normalized
+  const { cols, rows } = getGridDimensions(normalized)
+  const { minePercent } = normalized
   const random = mulberry32(seed)
   const total = rows * cols
-  const mineCount = clamp(Math.round((total * minePercent) / 100), 1, total - 1)
   const allIndices = Array.from({ length: total }, (_, index) => index)
 
-  const mineIndices = sampleWithoutReplacement(allIndices, mineCount, random)
+  let activeMask: boolean[] = []
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    activeMask = generateActiveMask(normalized, rows, cols, random)
+    if (activeMask.filter(Boolean).length >= 12) break
+  }
+  activeMask = ensureMinimumActiveCells(activeMask, rows, cols, 12)
+  const activeIndices = allIndices.filter((index) => activeMask[index])
+
+  const mineCount = clamp(Math.round((activeIndices.length * minePercent) / 100), 1, activeIndices.length - 1)
+  const minSafeStarts = 1
+  const mineIndices = sampleWithoutReplacement(activeIndices, mineCount, random)
   const mineSet = new Set(mineIndices)
-  const truth = createTruthBoard(rows, cols, mineSet)
-  const safeCandidates = allIndices.filter((index) => !mineSet.has(index))
+  const truth = createTruthBoard(rows, cols, mineSet, activeMask)
+  const safeCandidates = activeIndices.filter((index) => !mineSet.has(index))
   const initialStarts = new Set(sampleWithoutReplacement(safeCandidates, minSafeStarts, random))
   const safeStarts = computeSafeStarts(truth, rows, cols, initialStarts)
 
   const cells: CellState[] = truth.map((cell, index) => ({
     ...cell,
-    revealed: safeStarts.has(index),
+    revealed: cell.active ? safeStarts.has(index) : false,
     flagged: false,
-    start: safeStarts.has(index),
+    start: cell.active ? safeStarts.has(index) : false,
     exploded: false,
   }))
 
@@ -311,6 +555,7 @@ export function makeGame(settings: GenerationSettings, seed: number): GameState 
     rows,
     mineCount,
     safeStartCount: safeStarts.size,
+    activeCellCount: activeIndices.length,
     seed,
     status: 'playing',
     cells,
@@ -319,19 +564,19 @@ export function makeGame(settings: GenerationSettings, seed: number): GameState 
 
 export function getMineTargetFromSettings(settings: GenerationSettings): number {
   const normalized = normalizeSettings(settings)
-  const cellCount = normalized.cols * normalized.rows
-  return clamp(Math.round((cellCount * normalized.minePercent) / 100), 1, cellCount - 1)
+  const estimatedPlayable = estimatePlayableCells(normalized)
+  return clamp(Math.round((estimatedPlayable * normalized.minePercent) / 100), 1, estimatedPlayable - 1)
 }
 
 export function revealCell(previous: GameState, index: number): GameState {
   if (previous.status !== 'playing') return previous
   const target = previous.cells[index]
-  if (!target || target.revealed || target.flagged) return previous
+  if (!target || !target.active || target.revealed || target.flagged) return previous
 
   const cells = previous.cells.map((cell) => ({ ...cell }))
   if (cells[index].mine) {
     for (const cell of cells) {
-      if (cell.mine) cell.revealed = true
+      if (cell.active && cell.mine) cell.revealed = true
     }
     cells[index].exploded = true
     return { ...previous, cells, status: 'lost' }
@@ -345,7 +590,7 @@ export function revealCell(previous: GameState, index: number): GameState {
 export function toggleFlag(previous: GameState, index: number): GameState {
   if (previous.status !== 'playing') return previous
   const target = previous.cells[index]
-  if (!target || target.revealed) return previous
+  if (!target || !target.active || target.revealed) return previous
 
   const cells = previous.cells.map((cell, cellIndex) =>
     cellIndex === index ? { ...cell, flagged: !cell.flagged } : cell,
@@ -357,9 +602,11 @@ export function toggleFlag(previous: GameState, index: number): GameState {
 export function chordReveal(previous: GameState, index: number): GameState {
   if (previous.status !== 'playing') return previous
   const target = previous.cells[index]
-  if (!target || !target.revealed || target.mine || target.adjacentMines === 0) return previous
+  if (!target || !target.active || !target.revealed || target.mine || target.adjacentMines === 0) return previous
 
-  const neighbors = getNeighbors(index, previous.rows, previous.cols)
+  const neighbors = getNeighbors(index, previous.rows, previous.cols).filter(
+    (neighbor) => previous.cells[neighbor].active,
+  )
   const flaggedCount = neighbors.filter((neighbor) => previous.cells[neighbor].flagged).length
   if (flaggedCount !== target.adjacentMines) return previous
 
@@ -371,7 +618,7 @@ export function chordReveal(previous: GameState, index: number): GameState {
 
     if (cell.mine) {
       for (const mineCell of cells) {
-        if (mineCell.mine) mineCell.revealed = true
+        if (mineCell.active && mineCell.mine) mineCell.revealed = true
       }
       cell.exploded = true
       return { ...previous, cells, status: 'lost' }
@@ -386,7 +633,7 @@ export function chordReveal(previous: GameState, index: number): GameState {
 
 export function applyRightClick(previous: GameState, index: number): GameState {
   const target = previous.cells[index]
-  if (!target) return previous
+  if (!target || !target.active) return previous
   if (target.revealed) return chordReveal(previous, index)
   return toggleFlag(previous, index)
 }
