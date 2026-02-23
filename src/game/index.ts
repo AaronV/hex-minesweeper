@@ -1,5 +1,5 @@
-import { clamp, hashUnit, randomSeed } from './grid'
-import { generateMinesFromCA } from './mines'
+import { clamp, randomSeed } from './grid'
+import { generateMinesPrototypeNoop, generateMinesWeighted, type MineGenerationCandidate } from './mines'
 import { normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells } from './settings'
 import { generateLayoutPhase } from './layout'
 import { deterministicSolveFromStarts } from './solver'
@@ -13,6 +13,7 @@ import type {
   GenerationSettings,
   HintType,
   LayoutPhaseResult,
+  MineGenerationSystem,
 } from './types'
 import { DEFAULT_SETTINGS } from './types'
 
@@ -25,11 +26,25 @@ export type {
   HintType,
   MapLayout,
   LayoutPhaseResult,
+  MineGenerationSystem,
 } from './types'
 
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
 export { revealCell, toggleFlag, chordReveal, applyRightClick, checkWin }
 export { getNeighbors } from './grid'
+
+function generateMineSetBySystem(
+  system: MineGenerationSystem,
+  settings: GenerationSettings,
+  phase: LayoutPhaseResult,
+  target: number,
+  seed: number,
+): MineGenerationCandidate {
+  if (system === 'prototypeNoop') {
+    return generateMinesPrototypeNoop(settings, phase, target, seed)
+  }
+  return generateMinesWeighted(settings, phase, target, seed)
+}
 
 interface BuildGameArgs {
   phase: LayoutPhaseResult
@@ -64,27 +79,6 @@ function buildGameState({ phase, truth, hintType, mineCount, seed, report }: Bui
   }
 }
 
-function assignStartCell(phase: LayoutPhaseResult, seed: number): LayoutPhaseResult {
-  if (phase.activeIndices.length === 0) return { ...phase, startIndex: -1 }
-  const centerRow = Math.floor(phase.rows / 2)
-  const centerCol = Math.floor(phase.cols / 2)
-  const ranked = [...phase.activeIndices].sort((a, b) => {
-    const ar = Math.floor(a / phase.cols)
-    const ac = a % phase.cols
-    const br = Math.floor(b / phase.cols)
-    const bc = b % phase.cols
-    const ad = Math.hypot(ar - centerRow, ac - centerCol)
-    const bd = Math.hypot(br - centerRow, bc - centerCol)
-    if (ad !== bd) return ad - bd
-    const at = hashUnit(seed, ar, ac, phase.rows + phase.cols)
-    const bt = hashUnit(seed, br, bc, phase.rows + phase.cols)
-    return at - bt
-  })
-  const band = ranked.slice(0, Math.max(1, Math.floor(ranked.length * 0.35)))
-  const pickIndex = Math.floor(hashUnit(seed, phase.rows, phase.cols, band.length) * band.length)
-  return { ...phase, startIndex: band[pickIndex] ?? ranked[0] }
-}
-
 export function generateLayoutOnly(settings: GenerationSettings, seed: number): { phase: LayoutPhaseResult; game: GameState } {
   const normalized = normalizeSettings(settings)
   const phase = generateLayoutPhase(normalized, seed)
@@ -117,18 +111,18 @@ export function generateMinesForLayout(
   layoutSeed: number,
   seed: number,
 ): GameState {
-  const phaseWithStart = assignStartCell(phase, seed ^ layoutSeed)
   const normalized = normalizeSettings(settings)
   const requestedTargetMineCount = clamp(
-    getMineTargetFromActiveCells(phaseWithStart.activeIndices.length),
+    getMineTargetFromActiveCells(phase.activeIndices.length),
     1,
-    Math.max(1, phaseWithStart.activeIndices.length - 1),
+    Math.max(1, phase.activeIndices.length - 1),
   )
   const minimumTargetMineCount = Math.max(1, Math.floor(requestedTargetMineCount * 0.45))
   const maxAttemptsPerTarget = 16
 
+  let bestPhase: LayoutPhaseResult = { ...phase, startIndex: -1 }
   let bestMineSet = new Set<number>()
-  let bestTruth = createTruthBoard(phaseWithStart.rows, phaseWithStart.cols, bestMineSet, phaseWithStart.activeMask)
+  let bestTruth = createTruthBoard(phase.rows, phase.cols, bestMineSet, phase.activeMask)
   let bestDeterministic = false
   let bestTarget = requestedTargetMineCount
   let attempts = 0
@@ -136,31 +130,40 @@ export function generateMinesForLayout(
   for (let target = requestedTargetMineCount; target >= minimumTargetMineCount; target -= 1) {
     for (let attempt = 0; attempt < maxAttemptsPerTarget; attempt += 1) {
       const attemptSeed = seed + target * 104729 + attempt * 9187
-      const candidateMineSet = generateMinesFromCA(normalized, phaseWithStart, target, attemptSeed)
-      const candidateTruth = createTruthBoard(
-        phaseWithStart.rows,
-        phaseWithStart.cols,
-        candidateMineSet,
-        phaseWithStart.activeMask,
+      const candidate = generateMineSetBySystem(
+        normalized.mineGenerationSystem,
+        normalized,
+        phase,
+        target,
+        attemptSeed,
       )
-  const deterministic = deterministicSolveFromStarts(
+      const candidatePhase: LayoutPhaseResult = { ...phase, startIndex: candidate.startIndex }
+      const candidateTruth = createTruthBoard(
+        candidatePhase.rows,
+        candidatePhase.cols,
+        candidate.mineSet,
+        candidatePhase.activeMask,
+      )
+      const deterministic = deterministicSolveFromStarts(
         candidateTruth,
-        phaseWithStart.rows,
-        phaseWithStart.cols,
-        new Set([phaseWithStart.startIndex]),
+        candidatePhase.rows,
+        candidatePhase.cols,
+        new Set([candidatePhase.startIndex]),
         normalized.hintType,
       )
       attempts += 1
 
-      if (candidateMineSet.size > bestMineSet.size) {
-        bestMineSet = candidateMineSet
+      if (candidate.mineSet.size > bestMineSet.size) {
+        bestPhase = candidatePhase
+        bestMineSet = candidate.mineSet
         bestTruth = candidateTruth
         bestDeterministic = deterministic
         bestTarget = target
       }
 
       if (deterministic) {
-        bestMineSet = candidateMineSet
+        bestPhase = candidatePhase
+        bestMineSet = candidate.mineSet
         bestTruth = candidateTruth
         bestDeterministic = true
         bestTarget = target
@@ -171,7 +174,7 @@ export function generateMinesForLayout(
   }
 
   return buildGameState({
-    phase: phaseWithStart,
+    phase: bestPhase,
     truth: bestTruth,
     hintType: normalized.hintType,
     mineCount: bestMineSet.size,
@@ -187,8 +190,8 @@ export function generateMinesForLayout(
       attemptBudget: (requestedTargetMineCount - minimumTargetMineCount + 1) * maxAttemptsPerTarget,
       noGuessSolvePassed: bestDeterministic,
       note: bestDeterministic
-        ? `Mines generated after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
-        : `No guess-free layout found in ${attempts} attempts. Try Generate Mines again.`,
+        ? `${normalized.mineGenerationSystem} system generated mines after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
+        : `${normalized.mineGenerationSystem} system found no guess-free layout in ${attempts} attempts. Try Generate Mines again.`,
     },
   })
 }

@@ -1,6 +1,7 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
 export type MapLayout = 'rectangle' | 'rorschach' | 'snowflake'
 export type HintType = 'adjacent' | 'axisPairLine'
+export type MineGenerationSystem = 'weighted' | 'prototypeNoop'
 
 export interface CellTruth {
   active: boolean
@@ -20,6 +21,7 @@ export interface GenerationSettings {
   mapSize: number
   mapLayout: MapLayout
   hintType: HintType
+  mineGenerationSystem: MineGenerationSystem
   propagation: number
   snowflakeArms: number
   rectCols: number
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: GenerationSettings = {
   mapSize: 14,
   mapLayout: 'rectangle',
   hintType: 'adjacent',
+  mineGenerationSystem: 'weighted',
   propagation: 62,
   snowflakeArms: 6,
   rectCols: 20,

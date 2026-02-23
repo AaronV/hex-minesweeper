@@ -2,6 +2,11 @@ import { clamp, getNeighbors, hashUnit, mulberry32 } from './grid'
 import { DEFAULT_MINE_PERCENT } from './settings'
 import type { GenerationSettings, LayoutPhaseResult } from './types'
 
+export interface MineGenerationCandidate {
+  startIndex: number
+  mineSet: Set<number>
+}
+
 function weightedPickIndex(weights: number[], random: () => number): number {
   const total = weights.reduce((sum, value) => sum + value, 0)
   if (total <= 0) return Math.floor(random() * weights.length)
@@ -13,18 +18,46 @@ function weightedPickIndex(weights: number[], random: () => number): number {
   return weights.length - 1
 }
 
-export function generateMinesFromCA(
+function selectStartIndexCenterBiased(phase: LayoutPhaseResult, seed: number): number {
+  if (phase.activeIndices.length === 0) return -1
+  const centerRow = Math.floor(phase.rows / 2)
+  const centerCol = Math.floor(phase.cols / 2)
+  const ranked = [...phase.activeIndices].sort((a, b) => {
+    const ar = Math.floor(a / phase.cols)
+    const ac = a % phase.cols
+    const br = Math.floor(b / phase.cols)
+    const bc = b % phase.cols
+    const ad = Math.hypot(ar - centerRow, ac - centerCol)
+    const bd = Math.hypot(br - centerRow, bc - centerCol)
+    if (ad !== bd) return ad - bd
+    const at = hashUnit(seed, ar, ac, phase.rows + phase.cols)
+    const bt = hashUnit(seed, br, bc, phase.rows + phase.cols)
+    return at - bt
+  })
+  const band = ranked.slice(0, Math.max(1, Math.floor(ranked.length * 0.35)))
+  const pickIndex = Math.floor(hashUnit(seed, phase.rows, phase.cols, band.length) * band.length)
+  return band[pickIndex] ?? ranked[0]
+}
+
+function selectStartIndexRandom(phase: LayoutPhaseResult, seed: number): number {
+  if (phase.activeIndices.length === 0) return -1
+  const pickIndex = Math.floor(hashUnit(seed, phase.rows, phase.cols, phase.activeIndices.length) * phase.activeIndices.length)
+  return phase.activeIndices[pickIndex] ?? phase.activeIndices[0]
+}
+
+export function generateMinesWeighted(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   targetMineCount: number,
   seed: number,
-): Set<number> {
-  const { rows, cols, activeMask, startIndex, activeIndices } = phase
+): MineGenerationCandidate {
+  const startIndex = selectStartIndexCenterBiased(phase, seed ^ 0x5f3759df)
+  const { rows, cols, activeMask, activeIndices } = phase
   const startNeighbors = new Set(getNeighbors(startIndex, rows, cols).filter((n) => activeMask[n]))
   const safeZone = new Set<number>([startIndex, ...startNeighbors])
   const eligible = activeIndices.filter((index) => !safeZone.has(index))
   const safeTarget = clamp(targetMineCount, 0, eligible.length)
-  if (safeTarget <= 0 || eligible.length === 0) return new Set<number>()
+  if (safeTarget <= 0 || eligible.length === 0) return { startIndex, mineSet: new Set<number>() }
 
   const startRow = Math.floor(startIndex / cols)
   const startCol = startIndex % cols
@@ -54,5 +87,18 @@ export function generateMinesFromCA(
     weights.splice(chosen, 1)
   }
 
-  return mineSet
+  return { startIndex, mineSet }
+}
+
+export function generateMinesPrototypeNoop(
+  settings: GenerationSettings,
+  phase: LayoutPhaseResult,
+  targetMineCount: number,
+  seed: number,
+): MineGenerationCandidate {
+  // Placeholder system for experimentation: intentionally does almost nothing.
+  void settings
+  void targetMineCount
+  const startIndex = selectStartIndexRandom(phase, seed ^ 0x9e3779b9)
+  return { startIndex, mineSet: new Set<number>() }
 }

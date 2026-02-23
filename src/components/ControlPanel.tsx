@@ -1,4 +1,4 @@
-import type { GameState, GenerationSettings, MapLayout } from '../game'
+import type { GameState, GenerationSettings, MapLayout, MineGenerationSystem } from '../game'
 
 export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
 
@@ -61,6 +61,21 @@ export function ControlPanel({
             <option value="rectangle">Rectangle</option>
             <option value="rorschach">Rorschach Mirror</option>
             <option value="snowflake">Snowflake</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <div className="mb-1 flex justify-between">
+            <span>Mine System</span>
+            <span>{settings.mineGenerationSystem}</span>
+          </div>
+          <select
+            value={settings.mineGenerationSystem}
+            onChange={(event) => onSettingsChange({ mineGenerationSystem: event.target.value as MineGenerationSystem })}
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+          >
+            <option value="weighted">Weighted</option>
+            <option value="prototypeNoop">Prototype (No-op)</option>
           </select>
         </label>
 
