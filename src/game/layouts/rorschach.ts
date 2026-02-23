@@ -1,4 +1,20 @@
 import { getIndex, getNeighbors, hashUnit } from '../grid'
+import { rowColToCube, subCube, type CubeCoord } from './shared'
+
+function addCube(a: CubeCoord, b: CubeCoord): CubeCoord {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
+}
+
+function cubeToRowCol(cube: CubeCoord): { row: number; col: number } {
+  const row = cube.z
+  const col = cube.x + ((row - (row & 1)) >> 1)
+  return { row, col }
+}
+
+// Reflect across the vertical mirror axis in pointy-top axial space.
+function reflectAcrossVerticalAxis(relative: CubeCoord): CubeCoord {
+  return { x: relative.y, y: relative.x, z: relative.z }
+}
 
 export function generateRorschachMask(
   rows: number,
@@ -10,6 +26,7 @@ export function generateRorschachMask(
   const centerCol = Math.floor(cols / 2)
   const centerRow = Math.floor(rows / 2)
   const centerIndex = getIndex(centerRow, centerCol, cols)
+  const centerCube = rowColToCube(centerRow, centerCol)
   const spanX = Math.max(1, centerCol)
   const spanY = Math.max(1, Math.floor(rows / 2))
 
@@ -46,8 +63,13 @@ export function generateRorschachMask(
       const leftIndex = getIndex(row, col, cols)
       if (!connectedLeft[leftIndex]) continue
       full[leftIndex] = true
-      const mirrorCol = cols - 1 - col
-      full[getIndex(row, mirrorCol, cols)] = true
+      const relative = subCube(rowColToCube(row, col), centerCube)
+      const reflected = reflectAcrossVerticalAxis(relative)
+      const mirrored = addCube(centerCube, reflected)
+      const { row: mirrorRow, col: mirrorCol } = cubeToRowCol(mirrored)
+      if (mirrorRow >= 0 && mirrorRow < rows && mirrorCol >= 0 && mirrorCol < cols) {
+        full[getIndex(mirrorRow, mirrorCol, cols)] = true
+      }
     }
   }
 
