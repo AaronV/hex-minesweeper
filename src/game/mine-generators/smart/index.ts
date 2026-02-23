@@ -1,7 +1,7 @@
 import { getNeighbors } from '../../grid'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
 import type { MineGenerator, SmartMineSession } from '../types'
-import { buildPickSeed, canAcceptMine, pickCandidate, pickCandidates, pickHintValue } from './utilities'
+import { buildHintAttemptOrder, buildPickSeed, canAcceptMine, pickCandidate, pickCandidates } from './utilities'
 import { selectStartIndexRandom } from '../shared'
 
 /**
@@ -62,7 +62,7 @@ export function step(
 ): SmartMineSession {
   // 1) Initialize step-scoped inputs used by the deterministic pickers.
   const nextStepCount = session.stepCount + 1
-const candidates = session.candidateIndices
+  const candidates = session.candidateIndices
   const pickSeed = buildPickSeed(
     session.seed,
     phase.rows,
@@ -87,36 +87,112 @@ const candidates = session.candidateIndices
   const targetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
   const unassignedTargetNeighbors = targetNeighbors.filter((index) => !session.assignedSet.has(index))
 
-  // 4) Pick a hint attempt for the target and stage mine updates to satisfy it.
-  const hintValue = pickHintValue(pickSeed, targetIndex, unassignedTargetNeighbors.length)
-  const mineSet = new Set(session.mineSet)
-  const existingMinedNeighborCount = targetNeighbors.filter((index) => mineSet.has(index)).length
-  const minesNeeded = Math.max(0, hintValue - existingMinedNeighborCount)
-  const eligibleMineNeighbors = unassignedTargetNeighbors.filter(
-    (index) => !mineSet.has(index) && canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, mineSet),
-  )
-  const pickedMineNeighbors = pickCandidates(eligibleMineNeighbors, pickSeed ^ targetIndex, minesNeeded, [])
-  for (const mineIndex of pickedMineNeighbors) mineSet.add(mineIndex)
-  const finalMinedNeighborCount = targetNeighbors.filter((index) => mineSet.has(index)).length
-  const hintSatisfied = finalMinedNeighborCount === hintValue
+  // 4) Try hint values in deterministic order, rolling back failed attempts.
+  const maxHint = Math.min(6, Math.max(0, unassignedTargetNeighbors.length))
+  const hintAttemptOrder = buildHintAttemptOrder(pickSeed, targetIndex, maxHint)
+  const attemptLines: string[] = []
+  let acceptedHintValue = -1
+  let acceptedMineSet: Set<number> | null = null
+  let addedMinesForAcceptedAttempt: number[] = []
 
-  // 5) Record the attempted hint assignment for downstream validation/visualization.
-  const hintAssignments = new Map(session.hintAssignments)
-  hintAssignments.set(targetIndex, hintValue)
+  for (const hintValue of hintAttemptOrder) {
+    const attemptMineSet = new Set(session.mineSet)
+    const existingMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
+    if (existingMinedNeighborCount > hintValue) {
+      attemptLines.push(
+        `  - hint ${hintValue}: invalid (already has ${existingMinedNeighborCount} mined neighbors)`,
+      )
+      continue
+    }
 
-  // 6) Emit step telemetry and return the next immutable session snapshot.
-  const message =
-    `step ${nextStepCount}: target=${targetIndex}, hint=${hintValue}, minedNeighbors=${finalMinedNeighborCount}` +
-    `, addedMines=[${pickedMineNeighbors.join(', ')}], valid=${hintSatisfied}`
+    const minesNeeded = hintValue - existingMinedNeighborCount
+    const eligibleMineNeighbors = unassignedTargetNeighbors.filter(
+      (index) =>
+        !attemptMineSet.has(index) &&
+        canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, attemptMineSet),
+    )
+    if (eligibleMineNeighbors.length < minesNeeded) {
+      attemptLines.push(
+        `  - hint ${hintValue}: invalid (needs ${minesNeeded}, only ${eligibleMineNeighbors.length} eligible)`,
+      )
+      continue
+    }
 
+    const orderedMineCandidates = pickCandidates(
+      eligibleMineNeighbors,
+      pickSeed ^ targetIndex ^ hintValue,
+      eligibleMineNeighbors.length,
+      [],
+    )
+    const pickedMineNeighbors: number[] = []
+    for (const candidate of orderedMineCandidates) {
+      if (pickedMineNeighbors.length >= minesNeeded) break
+      if (!canAcceptMine(candidate, phase, session.assignedSet, session.hintAssignments, attemptMineSet)) continue
+      attemptMineSet.add(candidate)
+      pickedMineNeighbors.push(candidate)
+    }
+    if (pickedMineNeighbors.length < minesNeeded) {
+      attemptLines.push(
+        `  - hint ${hintValue}: invalid (picked ${pickedMineNeighbors.length}/${minesNeeded} mines)`,
+      )
+      continue
+    }
+
+    const finalMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
+    if (finalMinedNeighborCount !== hintValue) {
+      attemptLines.push(
+        `  - hint ${hintValue}: invalid (final mined neighbors ${finalMinedNeighborCount})`,
+      )
+      continue
+    }
+
+    attemptLines.push(
+      `  - hint ${hintValue}: valid (addedMines=[${pickedMineNeighbors.join(', ')}], minedNeighbors=${finalMinedNeighborCount})`,
+    )
+
+    acceptedHintValue = hintValue
+    acceptedMineSet = attemptMineSet
+    addedMinesForAcceptedAttempt = pickedMineNeighbors
+    break
+  }
+
+  // 5) Apply only a valid attempt; otherwise keep mine/hint state unchanged.
+  if (acceptedHintValue >= 0 && acceptedMineSet !== null) {
+    const assignedSet = new Set(session.assignedSet)
+    assignedSet.add(targetIndex)
+    const hintAssignments = new Map(session.hintAssignments)
+    hintAssignments.set(targetIndex, acceptedHintValue)
+    const message = [
+      `step ${nextStepCount}: target ${targetIndex}`,
+      `  setup: candidates=[${candidates.join(', ')}], unassignedNeighbors=[${unassignedTargetNeighbors.join(', ')}], hintOrder=[${hintAttemptOrder.join(', ')}]`,
+      ...attemptLines,
+      `  result: valid=true, acceptedHint=${acceptedHintValue}, addedMines=[${addedMinesForAcceptedAttempt.join(', ')}]`,
+    ].join('\n')
+    return {
+      ...session,
+      assignedSet,
+      mineSet: acceptedMineSet,
+      hintAssignments,
+      messages: [...session.messages, message],
+      stepCount: nextStepCount,
+      done: session.done,
+      lastAction: `tx step ${nextStepCount}: target ${targetIndex} accepted hint ${acceptedHintValue}`,
+    }
+  }
+
+  // 6) No valid hint assignment found for this target in this step.
+  const invalidMessage = [
+    `step ${nextStepCount}: target ${targetIndex}`,
+    `  setup: candidates=[${candidates.join(', ')}], unassignedNeighbors=[${unassignedTargetNeighbors.join(', ')}], hintOrder=[${hintAttemptOrder.join(', ')}]`,
+    ...attemptLines,
+    '  result: valid=false, no accepted hint',
+  ].join('\n')
   return {
     ...session,
-    mineSet,
-    hintAssignments,
-    messages: [...session.messages, message],
+    messages: [...session.messages, invalidMessage],
     stepCount: nextStepCount,
     done: session.done,
-    lastAction: `tx step ${nextStepCount}: target ${targetIndex} hint ${hintValue} valid=${hintSatisfied}`,
+    lastAction: `tx step ${nextStepCount}: no valid hint for target ${targetIndex}`,
   }
 }
 

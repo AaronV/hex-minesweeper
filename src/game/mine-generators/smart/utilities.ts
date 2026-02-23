@@ -49,6 +49,24 @@ export function pickHintValue(
 }
 
 /**
+ * Builds a deterministic attempt order for hint values in [0..maxHint].
+ */
+export function buildHintAttemptOrder(
+  seed: number,
+  targetIndex: number,
+  maxHint: number,
+): number[] {
+  const boundedMaxHint = Math.max(0, Math.min(6, maxHint))
+  const values = Array.from({ length: boundedMaxHint + 1 }, (_, hint) => hint)
+  return values.sort((a, b) => {
+    const ah = hashUnit(seed, targetIndex, a, boundedMaxHint + 1)
+    const bh = hashUnit(seed, targetIndex, b, boundedMaxHint + 1)
+    if (ah !== bh) return ah - bh
+    return a - b
+  })
+}
+
+/**
  * Deterministically selects up to `count` values from candidates, excluding rejected values.
  */
 export function pickCandidates(

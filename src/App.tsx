@@ -223,7 +223,7 @@ function App() {
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
-      <div className="fixed bottom-3 right-3 z-10 w-[360px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-left text-slate-700 shadow-lg backdrop-blur-sm">
+      <div className="fixed bottom-3 right-3 z-10 w-[560px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-left text-slate-700 shadow-lg backdrop-blur-sm">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-xs font-semibold tracking-wide text-slate-900">Mine Messages</h2>
           <span className="text-[11px] text-slate-500">{generationMessages.length}</span>
@@ -232,7 +232,9 @@ function App() {
           {generationMessages.length > 0 ? (
             <ul className="space-y-1">
               {generationMessages.map((message, index) => (
-                <li key={`${index}:${message}`}>{message}</li>
+                <li key={`${index}:${message}`} className="whitespace-pre-wrap">
+                  {message}
+                </li>
               ))}
             </ul>
           ) : (
