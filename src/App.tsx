@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel } from './components/ControlPanel'
 import {
@@ -30,6 +30,7 @@ function App() {
   const [settings, setSettings] = useState<GenerationSettings>(loadInitialSettings)
   const [game, setGame] = useState(() => makeGame(loadInitialSettings(), randomSeed()))
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
+  const [xrayMode, setXrayMode] = useState(false)
 
   const onGenerateLevel = useCallback(() => {
     setUndoGame(null)
@@ -73,23 +74,19 @@ function App() {
     })
   }, [])
 
-  const remainingFlags = useMemo(
-    () => game.mineCount - game.cells.filter((cell) => cell.flagged).length,
-    [game.cells, game.mineCount],
-  )
-
   return (
     <>
       <ControlPanel
         settings={settings}
         game={game}
-        remainingFlags={remainingFlags}
+        xrayMode={xrayMode}
         canUndo={undoGame !== null}
         onGenerateLevel={onGenerateLevel}
         onUndo={onUndo}
+        onToggleXrayMode={setXrayMode}
         onSettingsChange={onSettingsChange}
       />
-      <BoardCanvas game={game} onReveal={onReveal} onRightClick={onRightClick} />
+      <BoardCanvas game={game} xrayMode={xrayMode} onReveal={onReveal} onRightClick={onRightClick} />
     </>
   )
 }

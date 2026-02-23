@@ -9,11 +9,12 @@ const CONTROL_PANEL_GUTTER = 12
 
 interface BoardCanvasProps {
   game: GameState
+  xrayMode: boolean
   onReveal: (index: number) => void
   onRightClick: (index: number) => void
 }
 
-export function BoardCanvas({ game, onReveal, onRightClick }: BoardCanvasProps) {
+export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layoutRef = useRef<BoardLayout | null>(null)
   const [camera, setCamera] = useState<CameraState>({ zoom: 1, panX: 0, panY: 0 })
@@ -32,8 +33,8 @@ export function BoardCanvas({ game, onReveal, onRightClick }: BoardCanvasProps) 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    layoutRef.current = drawGameBoard(canvas, game, camera)
-  }, [camera, game])
+    layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode)
+  }, [camera, game, xrayMode])
 
   useEffect(() => {
     draw()

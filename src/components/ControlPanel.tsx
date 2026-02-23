@@ -3,20 +3,22 @@ import type { GameState, GenerationSettings, MapShape } from '../game'
 interface ControlPanelProps {
   settings: GenerationSettings
   game: GameState
-  remainingFlags: number
+  xrayMode: boolean
   canUndo: boolean
   onGenerateLevel: () => void
   onUndo: () => void
+  onToggleXrayMode: (enabled: boolean) => void
   onSettingsChange: (partial: Partial<GenerationSettings>) => void
 }
 
 export function ControlPanel({
   settings,
   game,
-  remainingFlags,
+  xrayMode,
   canUndo,
   onGenerateLevel,
   onUndo,
+  onToggleXrayMode,
   onSettingsChange,
 }: ControlPanelProps) {
   return (
@@ -53,40 +55,77 @@ export function ControlPanel({
             onChange={(event) => onSettingsChange({ mapShape: event.target.value as MapShape })}
             className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
           >
+            <option value="rectangle">Rectangle</option>
             <option value="rorschach">Rorschach Mirror</option>
             <option value="snowflake">Snowflake</option>
           </select>
         </label>
 
-        <label className="block">
-          <div className="mb-1 flex justify-between">
-            <span>Map Size</span>
-            <span>{settings.mapSize}</span>
-          </div>
-          <input
-            type="range"
-            min={8}
-            max={24}
-            value={settings.mapSize}
-            onChange={(event) => onSettingsChange({ mapSize: Number(event.target.value) })}
-            className="w-full"
-          />
-        </label>
+        {settings.mapShape === 'rectangle' ? (
+          <>
+            <label className="block">
+              <div className="mb-1 flex justify-between">
+                <span>Columns</span>
+                <span>{settings.rectCols}</span>
+              </div>
+              <input
+                type="range"
+                min={8}
+                max={40}
+                value={settings.rectCols}
+                onChange={(event) => onSettingsChange({ rectCols: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
 
-        <label className="block">
-          <div className="mb-1 flex justify-between">
-            <span>Propagation</span>
-            <span>{settings.propagation}</span>
-          </div>
-          <input
-            type="range"
-            min={20}
-            max={95}
-            value={settings.propagation}
-            onChange={(event) => onSettingsChange({ propagation: Number(event.target.value) })}
-            className="w-full"
-          />
-        </label>
+            <label className="block">
+              <div className="mb-1 flex justify-between">
+                <span>Rows</span>
+                <span>{settings.rectRows}</span>
+              </div>
+              <input
+                type="range"
+                min={8}
+                max={32}
+                value={settings.rectRows}
+                onChange={(event) => onSettingsChange({ rectRows: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="block">
+              <div className="mb-1 flex justify-between">
+                <span>Map Size</span>
+                <span>{settings.mapSize}</span>
+              </div>
+              <input
+                type="range"
+                min={8}
+                max={24}
+                value={settings.mapSize}
+                onChange={(event) => onSettingsChange({ mapSize: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
+
+            <label className="block">
+              <div className="mb-1 flex justify-between">
+                <span>Propagation</span>
+                <span>{settings.propagation}</span>
+              </div>
+              <input
+                type="range"
+                min={20}
+                max={95}
+                value={settings.propagation}
+                onChange={(event) => onSettingsChange({ propagation: Number(event.target.value) })}
+                className="w-full"
+              />
+            </label>
+          </>
+        )}
 
         {settings.mapShape === 'snowflake' ? (
           <label className="block">
@@ -105,18 +144,12 @@ export function ControlPanel({
           </label>
         ) : null}
 
-        <label className="block">
-          <div className="mb-1 flex justify-between">
-            <span>Mine Density</span>
-            <span>{settings.minePercent}%</span>
-          </div>
+        <label className="flex items-center justify-between rounded border border-slate-300 bg-white px-2 py-1.5">
+          <span>X-Ray (debug)</span>
           <input
-            type="range"
-            min={8}
-            max={38}
-            value={settings.minePercent}
-            onChange={(event) => onSettingsChange({ minePercent: Number(event.target.value) })}
-            className="w-full"
+            type="checkbox"
+            checked={xrayMode}
+            onChange={(event) => onToggleXrayMode(event.target.checked)}
           />
         </label>
 
@@ -129,19 +162,20 @@ export function ControlPanel({
         </span>
         <span>Mines</span>
         <span className="text-right">{game.mineCount}</span>
-        <span>Active Cells</span>
-        <span className="text-right">{game.activeCellCount}</span>
-        <span>Flags Left</span>
-        <span className="text-right">{remainingFlags}</span>
-        <span>Start Cell</span>
-        <span className="text-right">Marked safe</span>
         <span>Seed</span>
         <span className="truncate text-right">{game.seed}</span>
+        <span>Deterministic</span>
+        <span className="text-right">{game.generationReport.deterministicSolvePassed ? 'pass' : 'fail'}</span>
+        <span>Target Mines</span>
+        <span className="text-right">{game.generationReport.targetMines}</span>
+        <span>Generated Mines</span>
+        <span className="text-right">{game.generationReport.generatedMines}</span>
       </div>
 
       <p className="mt-3 text-[11px] text-slate-500">
         Controls: Left click to reveal, right click to flag, drag to pan, wheel to zoom.
       </p>
+      <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p>
     </div>
   )
 }
