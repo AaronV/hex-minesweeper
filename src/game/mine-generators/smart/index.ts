@@ -1,7 +1,7 @@
 import { getNeighbors } from '../../grid'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
 import type { MineGenerator, SmartMineSession } from '../types'
-import { buildPickSeed, pickDeterministicCandidate } from './utilities'
+import { buildPickSeed, pickCandidate, pickHintValue } from './utilities'
 import { selectStartIndexRandom } from '../shared'
 
 /**
@@ -64,7 +64,8 @@ export function step(
   const candidates = session.candidateIndices
   const pickSeed = buildPickSeed(
     session.seed,
-    phase,
+    phase.rows,
+    phase.cols,
     targetMineCount,
     settings.propagation,
   )
@@ -81,15 +82,19 @@ export function step(
   }
 
   // Get a target index to work on.
-  const targetIndex = pickDeterministicCandidate(candidates, pickSeed, [])
-  const message = `step ${nextStepCount}: target cell ${targetIndex} from candidates [${candidates.join(', ')}]`
+  const targetIndex = pickCandidate(candidates, pickSeed, [])
+  const unassignedTargetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter(
+    (index) => phase.activeMask[index] && !session.assignedSet.has(index),
+  )
+  const hintValue = pickHintValue(pickSeed, targetIndex, unassignedTargetNeighbors.length)
+  const message = `step ${nextStepCount}: target=${targetIndex}, hint=${hintValue}, candidates=[${candidates.join(', ')}]`
 
   return {
     ...session,
     messages: [...session.messages, message],
     stepCount: nextStepCount,
     done: session.done,
-    lastAction: `tx step ${nextStepCount}: selected target ${targetIndex} from ${candidates.length} candidates`,
+    lastAction: `tx step ${nextStepCount}: selected target ${targetIndex} with hint ${hintValue}`,
   }
 }
 
