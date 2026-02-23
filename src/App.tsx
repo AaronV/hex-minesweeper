@@ -4,6 +4,7 @@ import { ControlPanel } from './components/ControlPanel'
 import {
   applyRightClick,
   DEFAULT_SETTINGS,
+  type GameState,
   makeGame,
   normalizeSettings,
   randomSeed,
@@ -28,29 +29,48 @@ function loadInitialSettings(): GenerationSettings {
 function App() {
   const [settings, setSettings] = useState<GenerationSettings>(loadInitialSettings)
   const [game, setGame] = useState(() => makeGame(loadInitialSettings(), randomSeed()))
+  const [undoGame, setUndoGame] = useState<GameState | null>(null)
 
   const onGenerateLevel = useCallback(() => {
+    setUndoGame(null)
     setGame(makeGame(settings, randomSeed()))
   }, [settings])
 
   const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
-    setSettings((previous) => normalizeSettings({ ...previous, ...partial }))
+    setSettings((previous) => {
+      const next = normalizeSettings({ ...previous, ...partial })
+      setUndoGame(null)
+      setGame(makeGame(next, randomSeed()))
+      return next
+    })
   }, [])
-
-  useEffect(() => {
-    setGame(makeGame(settings, randomSeed()))
-  }, [settings])
 
   useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
   }, [settings])
 
-  const onReveal = useCallback((index: number) => {
-    setGame((previous) => revealCell(previous, index))
+  const applyMove = useCallback((move: (previous: GameState) => GameState) => {
+    setGame((previous) => {
+      const next = move(previous)
+      if (next !== previous) setUndoGame(previous)
+      return next
+    })
   }, [])
 
+  const onReveal = useCallback((index: number) => {
+    applyMove((previous) => revealCell(previous, index))
+  }, [applyMove])
+
   const onRightClick = useCallback((index: number) => {
-    setGame((previous) => applyRightClick(previous, index))
+    applyMove((previous) => applyRightClick(previous, index))
+  }, [applyMove])
+
+  const onUndo = useCallback(() => {
+    setUndoGame((previousUndo) => {
+      if (!previousUndo) return previousUndo
+      setGame(previousUndo)
+      return null
+    })
   }, [])
 
   const remainingFlags = useMemo(
@@ -64,7 +84,9 @@ function App() {
         settings={settings}
         game={game}
         remainingFlags={remainingFlags}
+        canUndo={undoGame !== null}
         onGenerateLevel={onGenerateLevel}
+        onUndo={onUndo}
         onSettingsChange={onSettingsChange}
       />
       <BoardCanvas game={game} onReveal={onReveal} onRightClick={onRightClick} />

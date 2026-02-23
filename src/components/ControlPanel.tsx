@@ -4,7 +4,9 @@ interface ControlPanelProps {
   settings: GenerationSettings
   game: GameState
   remainingFlags: number
+  canUndo: boolean
   onGenerateLevel: () => void
+  onUndo: () => void
   onSettingsChange: (partial: Partial<GenerationSettings>) => void
 }
 
@@ -12,20 +14,32 @@ export function ControlPanel({
   settings,
   game,
   remainingFlags,
+  canUndo,
   onGenerateLevel,
+  onUndo,
   onSettingsChange,
 }: ControlPanelProps) {
   return (
     <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h1 className="text-sm font-semibold tracking-wide text-slate-900">Hex Minesweeper</h1>
-        <button
-          type="button"
-          onClick={onGenerateLevel}
-          className="rounded bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500"
-        >
-          New Level
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={onGenerateLevel}
+            className="rounded bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500"
+          >
+            New Level
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-2 text-xs">
@@ -80,14 +94,14 @@ export function ControlPanel({
               <span>Snowflake Arms</span>
               <span>{settings.snowflakeArms}</span>
             </div>
-            <input
-              type="range"
-              min={3}
-              max={6}
+            <select
               value={settings.snowflakeArms}
               onChange={(event) => onSettingsChange({ snowflakeArms: Number(event.target.value) })}
-              className="w-full"
-            />
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+            >
+              <option value={3}>3</option>
+              <option value={6}>6</option>
+            </select>
           </label>
         ) : null}
 
