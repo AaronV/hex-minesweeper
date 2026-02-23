@@ -9,8 +9,8 @@ export function getGridDimensions(settings: GenerationSettings): { cols: number;
   }
   const size = settings.mapSize
   if (settings.mapLayout === 'rorschach') {
-    // Keep rorschach on an odd column count so it has one true center column.
-    return { cols: size * 2 + 11, rows: size * 2 + 2 }
+    // Keep odd cols/rows so both vertical and horizontal mirror modes have a true center axis.
+    return { cols: size * 2 + 11, rows: size * 2 + 3 }
   }
   return { cols: size * 2 + 6, rows: size * 2 + 6 }
 }
