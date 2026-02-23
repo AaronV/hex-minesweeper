@@ -6,7 +6,14 @@ import { deterministicSolveFromStarts } from './solver'
 import { createTruthBoard } from './truth'
 import { applyRightClick, chordReveal, revealCell, toggleFlag } from './transitions'
 import { checkWin } from './truth'
-import type { CellState, CellTruth, GameState, GenerationSettings, LayoutPhaseResult } from './types'
+import type {
+  CellState,
+  CellTruth,
+  GameState,
+  GenerationSettings,
+  HintType,
+  LayoutPhaseResult,
+} from './types'
 import { DEFAULT_SETTINGS } from './types'
 
 export type {
@@ -15,6 +22,7 @@ export type {
   GameState,
   GameStatus,
   GenerationSettings,
+  HintType,
   MapLayout,
   LayoutPhaseResult,
 } from './types'
@@ -26,12 +34,13 @@ export { getNeighbors } from './grid'
 interface BuildGameArgs {
   phase: LayoutPhaseResult
   truth: CellTruth[]
+  hintType: HintType
   mineCount: number
   seed: number
   report: GameState['generationReport']
 }
 
-function buildGameState({ phase, truth, mineCount, seed, report }: BuildGameArgs): GameState {
+function buildGameState({ phase, truth, hintType, mineCount, seed, report }: BuildGameArgs): GameState {
   const { rows, cols, activeIndices, startIndex } = phase
   const cells: CellState[] = truth.map((cell, index) => ({
     ...cell,
@@ -44,6 +53,7 @@ function buildGameState({ phase, truth, mineCount, seed, report }: BuildGameArgs
   return {
     cols,
     rows,
+    hintType,
     mineCount,
     safeStartCount: startIndex >= 0 ? 1 : 0,
     activeCellCount: activeIndices.length,
@@ -82,6 +92,7 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
   const game = buildGameState({
     phase,
     truth,
+    hintType: normalized.hintType,
     mineCount: 0,
     seed,
     report: {
@@ -132,11 +143,12 @@ export function generateMinesForLayout(
         candidateMineSet,
         phaseWithStart.activeMask,
       )
-      const deterministic = deterministicSolveFromStarts(
+  const deterministic = deterministicSolveFromStarts(
         candidateTruth,
         phaseWithStart.rows,
         phaseWithStart.cols,
         new Set([phaseWithStart.startIndex]),
+        normalized.hintType,
       )
       attempts += 1
 
@@ -161,6 +173,7 @@ export function generateMinesForLayout(
   return buildGameState({
     phase: phaseWithStart,
     truth: bestTruth,
+    hintType: normalized.hintType,
     mineCount: bestMineSet.size,
     seed,
     report: {

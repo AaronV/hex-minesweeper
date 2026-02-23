@@ -1,5 +1,6 @@
 import { getNeighbors } from './grid'
-import type { CellTruth } from './types'
+import { getCellHintValue, isZeroExpansionHint } from './hint-types'
+import type { CellTruth, HintType } from './types'
 
 interface SolverConstraint {
   unknown: number[]
@@ -19,6 +20,7 @@ function revealForSolver(
   revealed: boolean[],
   flagged: boolean[],
   startIndex: number,
+  hintType: HintType,
 ): boolean {
   const queue = [startIndex]
   while (queue.length > 0) {
@@ -28,7 +30,7 @@ function revealForSolver(
     const cell = truth[current]
     if (!cell.active || cell.mine) return false
     revealed[current] = true
-    if (cell.adjacentMines > 0) continue
+    if (!isZeroExpansionHint(cell, hintType)) continue
     for (const neighbor of getNeighbors(current, rows, cols)) {
       const n = truth[neighbor]
       if (n.active && !n.mine && !revealed[neighbor] && !flagged[neighbor]) {
@@ -45,6 +47,7 @@ function collectConstraints(
   cols: number,
   revealed: boolean[],
   flagged: boolean[],
+  hintType: HintType,
 ): SolverConstraint[] | null {
   const constraints: SolverConstraint[] = []
   for (let index = 0; index < truth.length; index += 1) {
@@ -54,7 +57,7 @@ function collectConstraints(
     const unknown = neighbors.filter((n) => !revealed[n] && !flagged[n]).sort((a, b) => a - b)
     if (unknown.length === 0) continue
     const flaggedCount = neighbors.filter((n) => flagged[n]).length
-    const remaining = cell.adjacentMines - flaggedCount
+    const remaining = getCellHintValue(cell, hintType) - flaggedCount
     if (remaining < 0 || remaining > unknown.length) return null
     constraints.push({ unknown, remaining })
   }
@@ -187,18 +190,19 @@ export function deterministicSolveFromStarts(
   rows: number,
   cols: number,
   initialStarts: Set<number>,
+  hintType: HintType = 'adjacent',
 ): boolean {
   const revealed = new Array(truth.length).fill(false)
   const flagged = new Array(truth.length).fill(false)
 
   for (const start of initialStarts) {
-    if (!revealForSolver(truth, rows, cols, revealed, flagged, start)) return false
+    if (!revealForSolver(truth, rows, cols, revealed, flagged, start, hintType)) return false
   }
 
   const allSafeRevealed = () => truth.every((cell, index) => !cell.active || cell.mine || revealed[index])
 
   while (!allSafeRevealed()) {
-    const constraints = collectConstraints(truth, rows, cols, revealed, flagged)
+    const constraints = collectConstraints(truth, rows, cols, revealed, flagged, hintType)
     if (!constraints) return false
     if (constraints.length === 0) return false
 
@@ -220,7 +224,7 @@ export function deterministicSolveFromStarts(
 
       for (const safeCell of solved.forcedSafe) {
         if (!revealed[safeCell] && !flagged[safeCell]) {
-          const ok = revealForSolver(truth, rows, cols, revealed, flagged, safeCell)
+          const ok = revealForSolver(truth, rows, cols, revealed, flagged, safeCell, hintType)
           if (!ok) return false
           progress = true
         }

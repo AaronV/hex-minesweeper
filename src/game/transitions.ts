@@ -1,4 +1,5 @@
 import { getNeighbors } from './grid'
+import { canAutoChord, getCellHintValue } from './hint-types'
 import { checkWin, revealCellRegion } from './truth'
 import type { GameState, GameStatus } from './types'
 
@@ -18,7 +19,7 @@ export function revealCell(previous: GameState, index: number): GameState {
     return { ...previous, cells, status: 'lost' }
   }
 
-  revealCellRegion(cells, previous.rows, previous.cols, index)
+  revealCellRegion(cells, previous.rows, previous.cols, index, previous.hintType)
   const status: GameStatus = checkWin(cells) ? 'won' : 'playing'
   return { ...previous, cells, status }
 }
@@ -38,13 +39,15 @@ export function toggleFlag(previous: GameState, index: number): GameState {
 export function chordReveal(previous: GameState, index: number): GameState {
   if (previous.status !== 'playing') return previous
   const target = previous.cells[index]
-  if (!target || !target.active || !target.revealed || target.mine || target.adjacentMines === 0) return previous
+  if (!target || !target.active || !target.revealed || target.mine || !canAutoChord(target, previous.hintType)) {
+    return previous
+  }
 
   const neighbors = getNeighbors(index, previous.rows, previous.cols).filter(
     (neighbor) => previous.cells[neighbor].active,
   )
   const flaggedCount = neighbors.filter((neighbor) => previous.cells[neighbor].flagged).length
-  if (flaggedCount !== target.adjacentMines) return previous
+  if (flaggedCount !== getCellHintValue(target, previous.hintType)) return previous
 
   const cells = previous.cells.map((cell) => ({ ...cell }))
 
@@ -60,7 +63,7 @@ export function chordReveal(previous: GameState, index: number): GameState {
       return { ...previous, cells, status: 'lost' }
     }
 
-    revealCellRegion(cells, previous.rows, previous.cols, neighbor)
+    revealCellRegion(cells, previous.rows, previous.cols, neighbor, previous.hintType)
   }
 
   const status: GameStatus = checkWin(cells) ? 'won' : 'playing'

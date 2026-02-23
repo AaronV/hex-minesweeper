@@ -1,10 +1,12 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
 export type MapLayout = 'rectangle' | 'rorschach' | 'snowflake'
+export type HintType = 'adjacent' | 'axisPairLine'
 
 export interface CellTruth {
   active: boolean
   mine: boolean
   adjacentMines: number
+  hints: Record<HintType, number>
 }
 
 export interface CellState extends CellTruth {
@@ -17,6 +19,7 @@ export interface CellState extends CellTruth {
 export interface GenerationSettings {
   mapSize: number
   mapLayout: MapLayout
+  hintType: HintType
   propagation: number
   snowflakeArms: number
   rectCols: number
@@ -26,6 +29,7 @@ export interface GenerationSettings {
 export interface GameState {
   cols: number
   rows: number
+  hintType: HintType
   mineCount: number
   safeStartCount: number
   activeCellCount: number
@@ -38,6 +42,7 @@ export interface GameState {
 export const DEFAULT_SETTINGS: GenerationSettings = {
   mapSize: 14,
   mapLayout: 'rectangle',
+  hintType: 'adjacent',
   propagation: 62,
   snowflakeArms: 6,
   rectCols: 20,

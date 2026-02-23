@@ -1,5 +1,5 @@
 import type { GameState } from '../game/types'
-import { getNeighbors } from '../game/grid'
+import { getCellHintValue, renderHint, shouldShowHint } from '../game/hint-types'
 import { computeLayout, toScreen } from './layout'
 import type { BoardLayout, CameraState } from './types'
 
@@ -56,21 +56,6 @@ function drawMine(
   ctx.stroke()
 }
 
-const numberColors = ['', '#2563eb', '#16a34a', '#dc2626', '#b45309', '#7c3aed', '#0891b2']
-
-function hasActionableUnknownNeighbors(game: GameState, index: number): boolean {
-  for (const neighbor of getNeighbors(index, game.rows, game.cols)) {
-    if (
-      game.cells[neighbor].active &&
-      !game.cells[neighbor].revealed &&
-      !game.cells[neighbor].flagged
-    ) {
-      return true
-    }
-  }
-  return false
-}
-
 export function drawGameBoard(
   canvas: HTMLCanvasElement,
   game: GameState,
@@ -100,6 +85,7 @@ export function drawGameBoard(
 
     const showMine = (xrayMode && cell.mine) || (game.status === 'lost' && cell.mine) || (cell.revealed && cell.mine)
     const hidden = !cell.revealed
+    const hintValue = getCellHintValue(cell, game.hintType)
 
     let fill = 'rgba(248, 250, 252, 1)'
 
@@ -114,21 +100,22 @@ export function drawGameBoard(
     if (drawRadius < 4) continue
     drawHex(ctx, position.x, position.y, drawRadius, fill)
 
-    const showHint =
-      (xrayMode && !cell.mine && cell.adjacentMines > 0) ||
-      (cell.revealed && !cell.mine && cell.adjacentMines > 0 && hasActionableUnknownNeighbors(game, index))
+    const showHint = shouldShowHint({ game, index, xrayMode }, game.hintType)
 
     if (!xrayMode && cell.flagged && hidden) {
       drawFlag(ctx, position.x, position.y, drawRadius)
     } else if (showMine) {
       drawMine(ctx, position.x, position.y, drawRadius, cell.exploded)
     } else if (showHint) {
-      const fontSize = Math.max(9, drawRadius * 0.55)
-      ctx.fillStyle = numberColors[cell.adjacentMines] ?? '#e2e8f0'
-      ctx.font = `600 ${fontSize}px "Avenir Next", sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(cell.adjacentMines), position.x, position.y + 1)
+      renderHint({
+        ctx,
+        game,
+        index,
+        value: hintValue,
+        x: position.x,
+        y: position.y,
+        radius: drawRadius,
+      }, game.hintType)
     }
 
     if (cell.start && hidden && !cell.flagged) {

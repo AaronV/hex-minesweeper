@@ -1,5 +1,6 @@
 import { getNeighbors } from './grid'
-import type { CellState, CellTruth } from './types'
+import { isZeroExpansionHint } from './hint-types'
+import type { CellState, CellTruth, HintType } from './types'
 
 export function createTruthBoard(
   rows: number,
@@ -12,7 +13,12 @@ export function createTruthBoard(
 
   for (let index = 0; index < total; index += 1) {
     const active = activeMask[index]
-    truth[index] = { active, mine: active && mineSet.has(index), adjacentMines: 0 }
+    truth[index] = {
+      active,
+      mine: active && mineSet.has(index),
+      adjacentMines: 0,
+      hints: { adjacent: 0, axisPairLine: 0 },
+    }
   }
 
   for (let index = 0; index < total; index += 1) {
@@ -22,12 +28,19 @@ export function createTruthBoard(
       if (truth[neighbor].active && truth[neighbor].mine) adjacent += 1
     }
     truth[index].adjacentMines = adjacent
+    truth[index].hints.adjacent = adjacent
   }
 
   return truth
 }
 
-export function revealCellRegion(cells: CellState[], rows: number, cols: number, startIndex: number): void {
+export function revealCellRegion(
+  cells: CellState[],
+  rows: number,
+  cols: number,
+  startIndex: number,
+  hintType: HintType,
+): void {
   const queue = [startIndex]
 
   while (queue.length > 0) {
@@ -37,7 +50,7 @@ export function revealCellRegion(cells: CellState[], rows: number, cols: number,
     const cell = cells[current]
     if (!cell.active || cell.revealed || cell.flagged) continue
     cell.revealed = true
-    if (cell.adjacentMines > 0 || cell.mine) continue
+    if (!isZeroExpansionHint(cell, hintType) || cell.mine) continue
 
     for (const neighbor of getNeighbors(current, rows, cols)) {
       const neighborCell = cells[neighbor]
