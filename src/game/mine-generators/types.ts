@@ -9,6 +9,7 @@ export interface BaseMineGenerationSession {
   system: MineGenerationSystem
   startIndex: number
   mineSet: Set<number>
+  messages: string[]
   stepCount: number
   seed: number
   lastAction: string
@@ -19,6 +20,7 @@ export interface SmartMineSession extends BaseMineGenerationSession {
   system: 'smart'
   assignedSet: Set<number>
   hintAssignments: Map<number, number>
+  candidateIndices: number[]
 }
 
 export interface WeightedMineSession extends BaseMineGenerationSession {

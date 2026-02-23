@@ -95,6 +95,7 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
       attemptBudget: 0,
       noGuessSolvePassed: true,
       note: 'Layout generated. No mines placed yet.',
+      messageLog: [],
     },
   })
   return { phase, game }
@@ -188,6 +189,7 @@ export function generateMinesForLayout(
       note: bestDeterministic
         ? `${normalized.mineGenerationSystem} system generated mines after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
         : `${normalized.mineGenerationSystem} system found no guess-free layout in ${attempts} attempts. Try Generate Mines again.`,
+      messageLog: [],
     },
   })
 }
@@ -251,6 +253,7 @@ export function advanceMineGeneration(
         session.system === 'smart'
           ? `${notePrefix} ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`
           : `${notePrefix} ${session.stepCount}: ${session.lastAction}`,
+      messageLog: session.messages,
     },
   })
 

@@ -1,15 +1,8 @@
+import { getNeighbors } from '../../grid'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
 import type { MineGenerator, SmartMineSession } from '../types'
+import { buildPickSeed, pickDeterministicCandidate } from './utilities'
 import { selectStartIndexRandom } from '../shared'
-
-/**
- * Smart transaction decision tree (minimal reset):
- * 1. Simulated player starts by opening the guaranteed start cell (hint 0).
- * 2. Pressing "Next Mine Step" runs exactly one transaction tick.
- * 3. This minimal version does not pick cells, hints, or mines yet.
- * 4. It only advances step count and preserves current state.
- * 5. Future rules will be added incrementally from this baseline.
- */
 
 /**
  * Creates the initial smart generation session for a layout.
@@ -29,12 +22,22 @@ export function initialize(
   const assignedSet = new Set<number>(startIndex >= 0 ? [startIndex] : [])
   const hintAssignments = new Map<number, number>()
   if (startIndex >= 0) hintAssignments.set(startIndex, 0)
+    
+  const candidateIndices =
+    startIndex >= 0
+      ? getNeighbors(startIndex, phase.rows, phase.cols).filter(
+          (index) => phase.activeMask[index] && !assignedSet.has(index),
+        )
+      : []
+
   return {
     system: 'smart',
     startIndex,
     assignedSet,
     hintAssignments,
+    candidateIndices,
     mineSet: new Set<number>(),
+    messages: [],
     stepCount: 0,
     seed,
     done: startIndex < 0,
@@ -57,14 +60,36 @@ export function step(
   targetMineCount: number,
   session: SmartMineSession,
 ): SmartMineSession {
-  void settings
-  void targetMineCount
-  void phase
+  const nextStepCount = session.stepCount + 1
+  const candidates = session.candidateIndices
+  const pickSeed = buildPickSeed(
+    session.seed,
+    phase,
+    targetMineCount,
+    settings.propagation,
+  )
+
+  // If no candidates are available, return an empty message session
+  if (candidates.length === 0) {
+    return {
+      ...session,
+      messages: [...session.messages, `step ${nextStepCount}: no candidate cells available`],
+      stepCount: nextStepCount,
+      done: session.done,
+      lastAction: `tx step ${nextStepCount}: no candidate cells`,
+    }
+  }
+
+  // Get a target index to work on.
+  const targetIndex = pickDeterministicCandidate(candidates, pickSeed, [])
+  const message = `step ${nextStepCount}: target cell ${targetIndex} from candidates [${candidates.join(', ')}]`
+
   return {
     ...session,
-    stepCount: session.stepCount + 1,
+    messages: [...session.messages, message],
+    stepCount: nextStepCount,
     done: session.done,
-    lastAction: `tx step ${session.stepCount + 1}: skeleton no-op`,
+    lastAction: `tx step ${nextStepCount}: selected target ${targetIndex} from ${candidates.length} candidates`,
   }
 }
 

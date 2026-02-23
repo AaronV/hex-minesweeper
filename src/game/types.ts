@@ -72,4 +72,5 @@ export interface GenerationReport {
   attemptBudget: number
   noGuessSolvePassed: boolean
   note: string
+  messageLog: string[]
 }
