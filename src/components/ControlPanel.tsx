@@ -196,12 +196,18 @@ export function ControlPanel({
           <span className="text-right">{game.mineCount}</span>
           <span>Seed</span>
           <span className="truncate text-right">{game.seed}</span>
-          <span>Deterministic</span>
-          <span className="text-right">{game.generationReport.deterministicSolvePassed ? 'pass' : 'fail'}</span>
+          <span>No-Guess Check</span>
+          <span className="text-right">{game.generationReport.noGuessSolvePassed ? 'pass' : 'fail'}</span>
           <span>Target Mines</span>
           <span className="text-right">{game.generationReport.targetMines}</span>
+          <span>Accepted Target</span>
+          <span className="text-right">{game.generationReport.acceptedTargetMines}</span>
           <span>Generated Mines</span>
           <span className="text-right">{game.generationReport.generatedMines}</span>
+          <span>Attempts</span>
+          <span className="text-right">
+            {game.generationReport.attemptsUsed}/{game.generationReport.attemptBudget}
+          </span>
         </div>
       ) : (
         <p className="mt-3 text-xs text-slate-600">Generate layout to begin.</p>

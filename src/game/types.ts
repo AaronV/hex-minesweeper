@@ -57,8 +57,10 @@ export interface GenerationReport {
   mineSeed: number
   activeCells: number
   targetMines: number
+  acceptedTargetMines: number
   generatedMines: number
-  deterministicSolvePassed: boolean
-  fallbackApplied: boolean
+  attemptsUsed: number
+  attemptBudget: number
+  noGuessSolvePassed: boolean
   note: string
 }

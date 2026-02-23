@@ -110,7 +110,7 @@ function App() {
 
   const canGenerateMines = layoutPhase !== null
   const canStartPlaying =
-    stage === 'mines' && game !== null && game.mineCount > 0 && game.generationReport.deterministicSolvePassed
+    stage === 'mines' && game !== null && game.mineCount > 0 && game.generationReport.noGuessSolvePassed
   const effectiveXrayMode = stage !== 'play' ? true : xrayMode
 
   return (

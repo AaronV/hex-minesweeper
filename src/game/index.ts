@@ -89,9 +89,11 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
       mineSeed: seed,
       activeCells: phase.activeIndices.length,
       targetMines: 0,
+      acceptedTargetMines: 0,
       generatedMines: 0,
-      deterministicSolvePassed: true,
-      fallbackApplied: false,
+      attemptsUsed: 0,
+      attemptBudget: 0,
+      noGuessSolvePassed: true,
       note: 'Layout generated. No mines placed yet.',
     },
   })
@@ -166,12 +168,14 @@ export function generateMinesForLayout(
       mineSeed: seed,
       activeCells: phase.activeIndices.length,
       targetMines: requestedTargetMineCount,
+      acceptedTargetMines: bestTarget,
       generatedMines: bestMineSet.size,
-      deterministicSolvePassed: bestDeterministic,
-      fallbackApplied: false,
+      attemptsUsed: attempts,
+      attemptBudget: (requestedTargetMineCount - minimumTargetMineCount + 1) * maxAttemptsPerTarget,
+      noGuessSolvePassed: bestDeterministic,
       note: bestDeterministic
         ? `Mines generated after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
-        : `No deterministic layout found in ${attempts} attempts. Try Generate Mines again.`,
+        : `No guess-free layout found in ${attempts} attempts. Try Generate Mines again.`,
     },
   })
 }
