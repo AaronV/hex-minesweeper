@@ -1,45 +1,16 @@
-import { clamp, getNeighbors, hashUnit } from './grid'
+import { clamp, getNeighbors, hashUnit, mulberry32 } from './grid'
 import { DEFAULT_MINE_PERCENT } from './settings'
 import type { GenerationSettings, ShapePhaseResult } from './types'
 
-function adjustMineCount(
-  mineMask: boolean[],
-  targetMineCount: number,
-  eligible: number[],
-  cols: number,
-  startIndex: number,
-  seed: number,
-): boolean[] {
-  const next = [...mineMask]
-  const startRow = Math.floor(startIndex / cols)
-  const startCol = startIndex % cols
-  const currentCount = () => eligible.reduce((count, idx) => count + (next[idx] ? 1 : 0), 0)
-
-  const score = (index: number) => {
-    const row = Math.floor(index / cols)
-    const col = index % cols
-    const dist = Math.hypot(row - startRow, col - startCol)
-    return dist * 0.8 + hashUnit(seed, row, col, 911) * 0.6
+function weightedPickIndex(weights: number[], random: () => number): number {
+  const total = weights.reduce((sum, value) => sum + value, 0)
+  if (total <= 0) return Math.floor(random() * weights.length)
+  let needle = random() * total
+  for (let i = 0; i < weights.length; i += 1) {
+    needle -= weights[i]
+    if (needle <= 0) return i
   }
-
-  let count = currentCount()
-  if (count < targetMineCount) {
-    const addOrder = [...eligible].filter((i) => !next[i]).sort((a, b) => score(b) - score(a))
-    for (const index of addOrder) {
-      if (count >= targetMineCount) break
-      next[index] = true
-      count += 1
-    }
-  } else if (count > targetMineCount) {
-    const removeOrder = [...eligible].filter((i) => next[i]).sort((a, b) => score(a) - score(b))
-    for (const index of removeOrder) {
-      if (count <= targetMineCount) break
-      next[index] = false
-      count -= 1
-    }
-  }
-
-  return next
+  return weights.length - 1
 }
 
 export function generateMinesFromCA(
@@ -52,48 +23,36 @@ export function generateMinesFromCA(
   const startNeighbors = new Set(getNeighbors(startIndex, rows, cols).filter((n) => activeMask[n]))
   const safeZone = new Set<number>([startIndex, ...startNeighbors])
   const eligible = activeIndices.filter((index) => !safeZone.has(index))
-  const mineMask = new Array<boolean>(rows * cols).fill(false)
+  const safeTarget = clamp(targetMineCount, 0, eligible.length)
+  if (safeTarget <= 0 || eligible.length === 0) return new Set<number>()
+
   const startRow = Math.floor(startIndex / cols)
   const startCol = startIndex % cols
   const distanceScale = Math.max(2, Math.max(rows, cols) * 0.65)
-  const jitterScale = settings.mapShape === 'rectangle' ? Math.max(rows, cols) : settings.mapSize
+  const spreadBias = clamp(settings.propagation / 100, 0.2, 0.95)
+  const random = mulberry32(seed ^ (rows << 8) ^ cols)
 
-  const baseline = clamp(DEFAULT_MINE_PERCENT / 100, 0.08, 0.38)
-  for (const index of eligible) {
+  const pool = [...eligible]
+  const weights = pool.map((index) => {
     const row = Math.floor(index / cols)
     const col = index % cols
     const dist = Math.hypot(row - startRow, col - startCol)
-    const distNorm = dist / distanceScale
+    const distNorm = clamp(dist / distanceScale, 0, 1.6)
     const localNoise = hashUnit(seed, row, col, settings.propagation)
-    const mineScore = baseline * 0.72 + distNorm * 0.34 + localNoise * 0.42 - 0.44
-    mineMask[index] = mineScore > 0
-  }
+    const shapeNoise = hashUnit(seed ^ 0x9e3779b9, col, row, rows + cols)
+    return 0.2 + distNorm * (0.9 * spreadBias) + localNoise * 0.6 + shapeNoise * 0.45
+  })
 
-  const iterations = 2 + Math.round(settings.propagation / 32)
-  for (let step = 0; step < iterations; step += 1) {
-    const next = [...mineMask]
-    for (const index of eligible) {
-      const neighbors = getNeighbors(index, rows, cols).filter((n) => activeMask[n] && !safeZone.has(n))
-      const mineNeighbors = neighbors.reduce((count, n) => count + (mineMask[n] ? 1 : 0), 0)
-      const jitter = hashUnit(seed + step * 101, index, mineNeighbors, jitterScale)
-      const bornMin = settings.propagation > 60 ? 2 : 3
-      const surviveMin = settings.propagation > 55 ? 1 : 2
-      const surviveMax = settings.propagation > 70 ? 5 : 4
-
-      if (mineMask[index]) {
-        next[index] = mineNeighbors >= surviveMin && mineNeighbors <= surviveMax
-      } else {
-        next[index] = mineNeighbors >= bornMin && mineNeighbors <= 4 && jitter > 0.34
-      }
-    }
-    for (const safeIndex of safeZone) next[safeIndex] = false
-    for (let i = 0; i < mineMask.length; i += 1) mineMask[i] = next[i]
-  }
-
-  const normalized = adjustMineCount(mineMask, targetMineCount, eligible, cols, startIndex, seed)
   const mineSet = new Set<number>()
-  for (const index of eligible) {
-    if (normalized[index]) mineSet.add(index)
+  const desiredCount = Math.max(1, Math.round((activeIndices.length * DEFAULT_MINE_PERCENT) / 100))
+  const picks = clamp(safeTarget, 1, Math.min(desiredCount, eligible.length))
+
+  for (let count = 0; count < picks && pool.length > 0; count += 1) {
+    const chosen = weightedPickIndex(weights, random)
+    mineSet.add(pool[chosen])
+    pool.splice(chosen, 1)
+    weights.splice(chosen, 1)
   }
+
   return mineSet
 }

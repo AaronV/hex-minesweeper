@@ -106,36 +106,72 @@ export function generateMinesForLayout(
 ): GameState {
   const phaseWithStart = assignStartCell(phase, seed ^ shapeSeed)
   const normalized = normalizeSettings(settings)
-  const targetMineCount = clamp(
+  const requestedTargetMineCount = clamp(
     getMineTargetFromActiveCells(phaseWithStart.activeIndices.length),
     1,
     Math.max(1, phaseWithStart.activeIndices.length - 1),
   )
-  const mineSet = generateMinesFromCA(normalized, phaseWithStart, targetMineCount, seed)
-  const truth = createTruthBoard(phaseWithStart.rows, phaseWithStart.cols, mineSet, phaseWithStart.activeMask)
-  const deterministicSolvePassed = deterministicSolveFromStarts(
-    truth,
-    phaseWithStart.rows,
-    phaseWithStart.cols,
-    new Set([phaseWithStart.startIndex]),
-  )
+  const minimumTargetMineCount = Math.max(1, Math.floor(requestedTargetMineCount * 0.45))
+  const maxAttemptsPerTarget = 16
+
+  let bestMineSet = new Set<number>()
+  let bestTruth = createTruthBoard(phaseWithStart.rows, phaseWithStart.cols, bestMineSet, phaseWithStart.activeMask)
+  let bestDeterministic = false
+  let bestTarget = requestedTargetMineCount
+  let attempts = 0
+
+  for (let target = requestedTargetMineCount; target >= minimumTargetMineCount; target -= 1) {
+    for (let attempt = 0; attempt < maxAttemptsPerTarget; attempt += 1) {
+      const attemptSeed = seed + target * 104729 + attempt * 9187
+      const candidateMineSet = generateMinesFromCA(normalized, phaseWithStart, target, attemptSeed)
+      const candidateTruth = createTruthBoard(
+        phaseWithStart.rows,
+        phaseWithStart.cols,
+        candidateMineSet,
+        phaseWithStart.activeMask,
+      )
+      const deterministic = deterministicSolveFromStarts(
+        candidateTruth,
+        phaseWithStart.rows,
+        phaseWithStart.cols,
+        new Set([phaseWithStart.startIndex]),
+      )
+      attempts += 1
+
+      if (candidateMineSet.size > bestMineSet.size) {
+        bestMineSet = candidateMineSet
+        bestTruth = candidateTruth
+        bestDeterministic = deterministic
+        bestTarget = target
+      }
+
+      if (deterministic) {
+        bestMineSet = candidateMineSet
+        bestTruth = candidateTruth
+        bestDeterministic = true
+        bestTarget = target
+        break
+      }
+    }
+    if (bestDeterministic) break
+  }
 
   return buildGameState({
     phase: phaseWithStart,
-    truth,
-    mineCount: mineSet.size,
+    truth: bestTruth,
+    mineCount: bestMineSet.size,
     seed,
     report: {
       shapeSeed,
       mineSeed: seed,
       activeCells: phase.activeIndices.length,
-      targetMines: targetMineCount,
-      generatedMines: mineSet.size,
-      deterministicSolvePassed,
+      targetMines: requestedTargetMineCount,
+      generatedMines: bestMineSet.size,
+      deterministicSolvePassed: bestDeterministic,
       fallbackApplied: false,
-      note: deterministicSolvePassed
-        ? 'Mines generated. Deterministic check passed.'
-        : 'Mines generated. Deterministic check failed.',
+      note: bestDeterministic
+        ? `Mines generated after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
+        : `No deterministic layout found in ${attempts} attempts. Try Generate Mines again.`,
     },
   })
 }
