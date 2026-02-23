@@ -223,9 +223,14 @@ export function advancePrototypeMineGeneration(
   )
 
   const initialized = previousSession ?? initializePrototypeMineSession(phase, layoutSeed)
-  const session = advancePrototypeMineSession(initialized)
+  const session = advancePrototypeMineSession(phase, initialized)
   const phaseWithStart: LayoutPhaseResult = { ...phase, startIndex: session.startIndex }
-  const truth = createTruthBoard(phase.rows, phase.cols, new Set<number>(), phase.activeMask)
+  const truth = createTruthBoard(phase.rows, phase.cols, session.mineSet, phase.activeMask)
+  for (const [index, hintValue] of session.hintAssignments) {
+    if (!truth[index]?.active || truth[index].mine) continue
+    truth[index].adjacentMines = hintValue
+    truth[index].hints.adjacent = hintValue
+  }
   const noGuessSolvePassed = deterministicSolveFromStarts(
     truth,
     phase.rows,
@@ -238,7 +243,7 @@ export function advancePrototypeMineGeneration(
     truth,
     hintType: normalized.hintType,
     assignedSet: session.assignedSet,
-    mineCount: 0,
+    mineCount: session.mineSet.size,
     seed,
     report: {
       layoutSeed,
@@ -246,11 +251,11 @@ export function advancePrototypeMineGeneration(
       activeCells: phase.activeIndices.length,
       targetMines: requestedTargetMineCount,
       acceptedTargetMines: requestedTargetMineCount,
-      generatedMines: 0,
+      generatedMines: session.mineSet.size,
       attemptsUsed: session.stepCount,
       attemptBudget: requestedTargetMineCount,
       noGuessSolvePassed,
-      note: `prototypeNoop step ${session.stepCount}: start cell assigned and locked (no mine placement yet).`,
+      note: `prototypeNoop tx ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`,
     },
   })
 

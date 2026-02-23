@@ -61,9 +61,11 @@ function App() {
   const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
   const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
   const [prototypeMineSession, setPrototypeMineSession] = useState<PrototypeMineSession | null>(null)
+  const [isPrototypeAutoRunning, setIsPrototypeAutoRunning] = useState(false)
   const [game, setGame] = useState<GameState | null>(INITIAL_LAYOUT.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [xrayMode, setXrayMode] = useState(false)
+  const canGenerateMines = layoutPhase !== null
 
   const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
     setSettings((previous) => {
@@ -76,6 +78,7 @@ function App() {
       setGame(generated.game)
       setStage('layout')
       setUndoGame(null)
+      setIsPrototypeAutoRunning(false)
       return next
     })
   }, [seedText])
@@ -89,6 +92,7 @@ function App() {
     setGame(layoutGame)
     setStage('layout')
     setUndoGame(null)
+    setIsPrototypeAutoRunning(false)
   }, [seedText, settings])
 
   const onGenerateMines = useCallback(() => {
@@ -107,6 +111,12 @@ function App() {
       setGame(result.game)
       setStage('mines')
       setUndoGame(null)
+      if (
+        result.session.lastAction === 'no frontier cells available' ||
+        result.session.lastAction.startsWith('transaction failed:')
+      ) {
+        setIsPrototypeAutoRunning(false)
+      }
       return
     }
 
@@ -116,13 +126,20 @@ function App() {
     setGame(next)
     setStage('mines')
     setUndoGame(null)
+    setIsPrototypeAutoRunning(false)
   }, [layoutPhase, layoutSeed, prototypeMineSession, seedText, settings])
 
   const onStartPlaying = useCallback(() => {
     if (!game) return
     setStage('play')
     setUndoGame(null)
+    setIsPrototypeAutoRunning(false)
   }, [game])
+
+  const onTogglePrototypeAutoRun = useCallback(() => {
+    if (!canGenerateMines || settings.mineGenerationSystem !== 'prototypeNoop') return
+    setIsPrototypeAutoRunning((previous) => !previous)
+  }, [canGenerateMines, settings.mineGenerationSystem])
 
   useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
@@ -131,6 +148,18 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(SEED_STORAGE_KEY, seedText)
   }, [seedText])
+
+  useEffect(() => {
+    if (!isPrototypeAutoRunning) return
+    if (settings.mineGenerationSystem !== 'prototypeNoop') return
+    if (stage !== 'mines' && stage !== 'layout') return
+    if (!canGenerateMines) return
+
+    const id = window.setInterval(() => {
+      onGenerateMines()
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [canGenerateMines, isPrototypeAutoRunning, onGenerateMines, settings.mineGenerationSystem, stage])
 
   const applyMove = useCallback((move: (previous: GameState) => GameState) => {
     setGame((previous) => {
@@ -166,9 +195,16 @@ function App() {
     })
   }, [stage])
 
-  const canGenerateMines = layoutPhase !== null
+  const prototypeAssignmentComplete =
+    settings.mineGenerationSystem === 'prototypeNoop' &&
+    stage === 'mines' &&
+    layoutPhase !== null &&
+    prototypeMineSession !== null &&
+    prototypeMineSession.assignedSet.size >= layoutPhase.activeIndices.length
   const canStartPlaying =
-    stage === 'mines' && game !== null && game.mineCount > 0 && game.generationReport.noGuessSolvePassed
+    stage === 'mines' &&
+    game !== null &&
+    (prototypeAssignmentComplete || (game.mineCount > 0 && game.generationReport.noGuessSolvePassed))
   const effectiveXrayMode = stage !== 'play' ? true : xrayMode
 
   return (
@@ -182,9 +218,12 @@ function App() {
         canUndo={undoGame !== null}
         canGenerateMines={canGenerateMines}
         canStartPlaying={canStartPlaying}
+        isPrototypeAutoRunning={isPrototypeAutoRunning}
+        prototypeStepCount={prototypeMineSession?.stepCount ?? 0}
         onGenerateLayout={onGenerateLayout}
         onGenerateMines={onGenerateMines}
         onStartPlaying={onStartPlaying}
+        onTogglePrototypeAutoRun={onTogglePrototypeAutoRun}
         onUndo={onUndo}
         onToggleXrayMode={setXrayMode}
         onSeedTextChange={setSeedText}

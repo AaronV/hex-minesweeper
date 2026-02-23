@@ -11,9 +11,12 @@ interface ControlPanelProps {
   canUndo: boolean
   canGenerateMines: boolean
   canStartPlaying: boolean
+  isPrototypeAutoRunning: boolean
+  prototypeStepCount: number
   onGenerateLayout: () => void
   onGenerateMines: () => void
   onStartPlaying: () => void
+  onTogglePrototypeAutoRun: () => void
   onUndo: () => void
   onToggleXrayMode: (enabled: boolean) => void
   onSeedTextChange: (value: string) => void
@@ -29,9 +32,12 @@ export function ControlPanel({
   canUndo,
   canGenerateMines,
   canStartPlaying,
+  isPrototypeAutoRunning,
+  prototypeStepCount,
   onGenerateLayout,
   onGenerateMines,
   onStartPlaying,
+  onTogglePrototypeAutoRun,
   onUndo,
   onToggleXrayMode,
   onSeedTextChange,
@@ -194,14 +200,27 @@ export function ControlPanel({
           >
             1. Generate Layout
           </button>
-          <button
-            type="button"
-            onClick={onGenerateMines}
-            disabled={!canGenerateMines}
-            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {mineButtonLabel}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onGenerateMines}
+              disabled={!canGenerateMines}
+              className="flex-1 rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {mineButtonLabel}
+            </button>
+            {settings.mineGenerationSystem === 'prototypeNoop' ? (
+              <label className="flex items-center gap-1 text-xs text-slate-700">
+                <span>Auto-Step</span>
+                <input
+                  type="checkbox"
+                  checked={isPrototypeAutoRunning}
+                  disabled={!canGenerateMines}
+                  onChange={onTogglePrototypeAutoRun}
+                />
+              </label>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onStartPlaying}
@@ -247,6 +266,12 @@ export function ControlPanel({
           <span className="text-right">
             {game.generationReport.attemptsUsed}/{game.generationReport.attemptBudget}
           </span>
+          {settings.mineGenerationSystem === 'prototypeNoop' ? (
+            <>
+              <span>Prototype Step</span>
+              <span className="text-right font-semibold text-slate-900">{prototypeStepCount}</span>
+            </>
+          ) : null}
         </div>
       ) : (
         <p className="mt-3 text-xs text-slate-600">Generate layout to begin.</p>
