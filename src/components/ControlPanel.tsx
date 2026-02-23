@@ -4,6 +4,7 @@ export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
 
 interface ControlPanelProps {
   settings: GenerationSettings
+  seedText: string
   game: GameState | null
   stage: WorkflowStage
   xrayMode: boolean
@@ -15,11 +16,13 @@ interface ControlPanelProps {
   onStartPlaying: () => void
   onUndo: () => void
   onToggleXrayMode: (enabled: boolean) => void
+  onSeedTextChange: (value: string) => void
   onSettingsChange: (partial: Partial<GenerationSettings>) => void
 }
 
 export function ControlPanel({
   settings,
+  seedText,
   game,
   stage,
   xrayMode,
@@ -31,8 +34,14 @@ export function ControlPanel({
   onStartPlaying,
   onUndo,
   onToggleXrayMode,
+  onSeedTextChange,
   onSettingsChange,
 }: ControlPanelProps) {
+  const mineButtonLabel =
+    settings.mineGenerationSystem === 'prototypeNoop' && stage === 'mines'
+      ? '2. Next Prototype Step'
+      : '2. Generate Mines'
+
   return (
     <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -77,6 +86,21 @@ export function ControlPanel({
             <option value="weighted">Weighted</option>
             <option value="prototypeNoop">Prototype (No-op)</option>
           </select>
+        </label>
+
+        <label className="block">
+          <div className="mb-1 flex justify-between">
+            <span>Seed</span>
+            <span>{seedText.trim() === '' ? 'random' : 'fixed'}</span>
+          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={seedText}
+            onChange={(event) => onSeedTextChange(event.target.value.replace(/[^\d]/g, ''))}
+            placeholder="Leave empty for random"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 placeholder:text-slate-400"
+          />
         </label>
 
         {settings.mapLayout === 'rectangle' ? (
@@ -176,7 +200,7 @@ export function ControlPanel({
             disabled={!canGenerateMines}
             className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
           >
-            2. Generate Mines
+            {mineButtonLabel}
           </button>
           <button
             type="button"

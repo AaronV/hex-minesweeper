@@ -23,6 +23,28 @@ function drawHex(
   ctx.fill()
 }
 
+function strokeHex(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  stroke: string,
+  lineWidth: number,
+): void {
+  ctx.beginPath()
+  for (let i = 0; i < 6; i += 1) {
+    const angle = (Math.PI / 180) * (60 * i - 30)
+    const hx = x + radius * Math.cos(angle)
+    const hy = y + radius * Math.sin(angle)
+    if (i === 0) ctx.moveTo(hx, hy)
+    else ctx.lineTo(hx, hy)
+  }
+  ctx.closePath()
+  ctx.strokeStyle = stroke
+  ctx.lineWidth = lineWidth
+  ctx.stroke()
+}
+
 function drawFlag(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number): void {
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)'
   ctx.lineWidth = Math.max(1, radius * 0.08)
@@ -61,6 +83,7 @@ export function drawGameBoard(
   game: GameState,
   camera: CameraState,
   xrayMode = false,
+  generationPreviewMode = false,
 ): BoardLayout | null {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
@@ -83,8 +106,10 @@ export function drawGameBoard(
     const center = layout.centers[index]
     if (!center || !cell.active) continue
 
-    const showMine = (xrayMode && cell.mine) || (game.status === 'lost' && cell.mine) || (cell.revealed && cell.mine)
-    const hidden = !cell.revealed
+    const previewOpen = generationPreviewMode && cell.assigned
+    const showMine =
+      (xrayMode && cell.mine) || (game.status === 'lost' && cell.mine) || ((cell.revealed || previewOpen) && cell.mine)
+    const hidden = !(cell.revealed || previewOpen)
     const hintValue = getCellHintValue(cell, game.hintType)
 
     let fill = 'rgba(248, 250, 252, 1)'
@@ -118,17 +143,26 @@ export function drawGameBoard(
       }, game.hintType)
     }
 
-    if (cell.start && hidden && !cell.flagged) {
-      ctx.beginPath()
-      ctx.arc(position.x, position.y, Math.max(4, drawRadius * 0.24), 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)'
-      ctx.lineWidth = Math.max(1.5, drawRadius * 0.08)
-      ctx.stroke()
+    if (cell.assigned) {
+      strokeHex(
+        ctx,
+        position.x,
+        position.y,
+        Math.max(4, drawRadius - 0.35),
+        'rgba(15, 23, 42, 0.95)',
+        Math.max(1.2, drawRadius * 0.07),
+      )
+    }
 
-      ctx.beginPath()
-      ctx.arc(position.x, position.y, Math.max(1.8, drawRadius * 0.09), 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(22, 163, 74, 0.95)'
-      ctx.fill()
+    if (cell.start && (hidden || generationPreviewMode) && !cell.flagged) {
+      strokeHex(
+        ctx,
+        position.x,
+        position.y,
+        Math.max(3, drawRadius - Math.max(1.8, drawRadius * 0.18)),
+        'rgba(22, 163, 74, 0.98)',
+        Math.max(1.4, drawRadius * 0.08),
+      )
     }
   }
 

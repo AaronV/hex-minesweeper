@@ -7,6 +7,12 @@ export interface MineGenerationCandidate {
   mineSet: Set<number>
 }
 
+export interface PrototypeMineSession {
+  startIndex: number
+  assignedSet: Set<number>
+  stepCount: number
+}
+
 function weightedPickIndex(weights: number[], random: () => number): number {
   const total = weights.reduce((sum, value) => sum + value, 0)
   if (total <= 0) return Math.floor(random() * weights.length)
@@ -90,15 +96,45 @@ export function generateMinesWeighted(
   return { startIndex, mineSet }
 }
 
+  /**
+   * Prototype generator assumptions (v0):
+   * 1. The chosen start cell is the only cell guaranteed to be mine-free.
+   * 2. The chosen start cell should also evaluate to a 0-valued hint.
+   * 3. Assigned cells are locked and may not be altered by later steps.
+   */
 export function generateMinesPrototypeNoop(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   targetMineCount: number,
   seed: number,
 ): MineGenerationCandidate {
-  // Placeholder system for experimentation: intentionally does almost nothing.
   void settings
   void targetMineCount
   const startIndex = selectStartIndexRandom(phase, seed ^ 0x9e3779b9)
   return { startIndex, mineSet: new Set<number>() }
+}
+
+export function initializePrototypeMineSession(
+  phase: LayoutPhaseResult,
+  seed: number,
+): PrototypeMineSession {
+  const startIndex = selectStartIndexRandom(phase, seed ^ 0x9e3779b9)
+  const assignedSet = new Set<number>(startIndex >= 0 ? [startIndex] : [])
+  return {
+    startIndex,
+    assignedSet,
+    stepCount: 0,
+  }
+}
+
+export function advancePrototypeMineSession(
+  session: PrototypeMineSession,
+): PrototypeMineSession {
+  const nextAssignedSet = new Set<number>(session.assignedSet)
+  if (session.startIndex >= 0) nextAssignedSet.add(session.startIndex)
+  return {
+    startIndex: session.startIndex,
+    assignedSet: nextAssignedSet,
+    stepCount: session.stepCount + 1,
+  }
 }

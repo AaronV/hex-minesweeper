@@ -14,6 +14,7 @@ export interface CellState extends CellTruth {
   revealed: boolean
   flagged: boolean
   start: boolean
+  assigned: boolean
   exploded: boolean
 }
 

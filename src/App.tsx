@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, type WorkflowStage } from './components/ControlPanel'
 import {
+  advancePrototypeMineGeneration,
   applyRightClick,
   DEFAULT_SETTINGS,
   generateLayoutOnly,
@@ -12,9 +13,11 @@ import {
   revealCell,
   type GenerationSettings,
   type LayoutPhaseResult,
+  type PrototypeMineSession,
 } from './game'
 
 const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
+const SEED_STORAGE_KEY = 'hex-minesweeper:seed-text'
 
 function loadInitialSettings(): GenerationSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS
@@ -28,41 +31,92 @@ function loadInitialSettings(): GenerationSettings {
   }
 }
 
+function loadInitialSeedText(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.localStorage.getItem(SEED_STORAGE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function parseSeed(seedText: string): number | null {
+  const trimmed = seedText.trim()
+  if (trimmed === '') return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return null
+  const normalized = Math.floor(Math.abs(parsed)) >>> 0
+  return normalized
+}
+
+const INITIAL_SETTINGS = loadInitialSettings()
+const INITIAL_SEED_TEXT = loadInitialSeedText()
+const INITIAL_LAYOUT_SEED = parseSeed(INITIAL_SEED_TEXT) ?? randomSeed()
+const INITIAL_LAYOUT = generateLayoutOnly(INITIAL_SETTINGS, INITIAL_LAYOUT_SEED)
+
 function App() {
-  const [settings, setSettings] = useState<GenerationSettings>(loadInitialSettings)
-  const [stage, setStage] = useState<WorkflowStage>('setup')
-  const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(null)
-  const [layoutSeed, setLayoutSeed] = useState<number>(0)
-  const [game, setGame] = useState<GameState | null>(null)
+  const [settings, setSettings] = useState<GenerationSettings>(INITIAL_SETTINGS)
+  const [seedText, setSeedText] = useState<string>(INITIAL_SEED_TEXT)
+  const [stage, setStage] = useState<WorkflowStage>('layout')
+  const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
+  const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
+  const [prototypeMineSession, setPrototypeMineSession] = useState<PrototypeMineSession | null>(null)
+  const [game, setGame] = useState<GameState | null>(INITIAL_LAYOUT.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [xrayMode, setXrayMode] = useState(false)
 
   const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
-    setSettings((previous) => normalizeSettings({ ...previous, ...partial }))
-    setStage('setup')
-    setLayoutPhase(null)
-    setGame(null)
-    setUndoGame(null)
-  }, [])
+    setSettings((previous) => {
+      const next = normalizeSettings({ ...previous, ...partial })
+      const seed = parseSeed(seedText) ?? randomSeed()
+      const generated = generateLayoutOnly(next, seed)
+      setLayoutSeed(seed)
+      setLayoutPhase(generated.phase)
+      setPrototypeMineSession(null)
+      setGame(generated.game)
+      setStage('layout')
+      setUndoGame(null)
+      return next
+    })
+  }, [seedText])
 
   const onGenerateLayout = useCallback(() => {
-    const seed = randomSeed()
+    const seed = parseSeed(seedText) ?? randomSeed()
     const { phase, game: layoutGame } = generateLayoutOnly(settings, seed)
     setLayoutSeed(seed)
     setLayoutPhase(phase)
+    setPrototypeMineSession(null)
     setGame(layoutGame)
     setStage('layout')
     setUndoGame(null)
-  }, [settings])
+  }, [seedText, settings])
 
   const onGenerateMines = useCallback(() => {
     if (!layoutPhase) return
-    const mineSeed = randomSeed()
+    if (settings.mineGenerationSystem === 'prototypeNoop') {
+      const baseSeed = parseSeed(seedText)
+      const stepOffset = prototypeMineSession ? prototypeMineSession.stepCount + 1 : 1
+      const result = advancePrototypeMineGeneration(
+        settings,
+        layoutPhase,
+        layoutSeed,
+        prototypeMineSession,
+        baseSeed !== null ? (baseSeed + stepOffset) >>> 0 : randomSeed(),
+      )
+      setPrototypeMineSession(result.session)
+      setGame(result.game)
+      setStage('mines')
+      setUndoGame(null)
+      return
+    }
+
+    const mineSeed = parseSeed(seedText) !== null ? ((parseSeed(seedText) ?? 0) + 1) >>> 0 : randomSeed()
     const next = generateMinesForLayout(settings, layoutPhase, layoutSeed, mineSeed)
+    setPrototypeMineSession(null)
     setGame(next)
     setStage('mines')
     setUndoGame(null)
-  }, [layoutPhase, layoutSeed, settings])
+  }, [layoutPhase, layoutSeed, prototypeMineSession, seedText, settings])
 
   const onStartPlaying = useCallback(() => {
     if (!game) return
@@ -73,6 +127,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
   }, [settings])
+
+  useEffect(() => {
+    window.localStorage.setItem(SEED_STORAGE_KEY, seedText)
+  }, [seedText])
 
   const applyMove = useCallback((move: (previous: GameState) => GameState) => {
     setGame((previous) => {
@@ -117,6 +175,7 @@ function App() {
     <>
       <ControlPanel
         settings={settings}
+        seedText={seedText}
         game={game}
         stage={stage}
         xrayMode={effectiveXrayMode}
@@ -128,6 +187,7 @@ function App() {
         onStartPlaying={onStartPlaying}
         onUndo={onUndo}
         onToggleXrayMode={setXrayMode}
+        onSeedTextChange={setSeedText}
         onSettingsChange={onSettingsChange}
       />
       <BoardCanvas

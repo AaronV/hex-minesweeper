@@ -1,5 +1,12 @@
 import { clamp, randomSeed } from './grid'
-import { generateMinesPrototypeNoop, generateMinesWeighted, type MineGenerationCandidate } from './mines'
+import {
+  advancePrototypeMineSession,
+  generateMinesPrototypeNoop,
+  generateMinesWeighted,
+  initializePrototypeMineSession,
+  type MineGenerationCandidate,
+  type PrototypeMineSession,
+} from './mines'
 import { normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells } from './settings'
 import { generateLayoutPhase } from './layout'
 import { deterministicSolveFromStarts } from './solver'
@@ -32,6 +39,7 @@ export type {
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
 export { revealCell, toggleFlag, chordReveal, applyRightClick, checkWin }
 export { getNeighbors } from './grid'
+export type { PrototypeMineSession } from './mines'
 
 function generateMineSetBySystem(
   system: MineGenerationSystem,
@@ -50,18 +58,20 @@ interface BuildGameArgs {
   phase: LayoutPhaseResult
   truth: CellTruth[]
   hintType: HintType
+  assignedSet?: Set<number>
   mineCount: number
   seed: number
   report: GameState['generationReport']
 }
 
-function buildGameState({ phase, truth, hintType, mineCount, seed, report }: BuildGameArgs): GameState {
+function buildGameState({ phase, truth, hintType, assignedSet, mineCount, seed, report }: BuildGameArgs): GameState {
   const { rows, cols, activeIndices, startIndex } = phase
   const cells: CellState[] = truth.map((cell, index) => ({
     ...cell,
     revealed: false,
     flagged: false,
     start: cell.active && startIndex >= 0 ? index === startIndex : false,
+    assigned: assignedSet?.has(index) ?? false,
     exploded: false,
   }))
 
@@ -87,6 +97,7 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
     phase,
     truth,
     hintType: normalized.hintType,
+    assignedSet: new Set<number>(),
     mineCount: 0,
     seed,
     report: {
@@ -177,6 +188,7 @@ export function generateMinesForLayout(
     phase: bestPhase,
     truth: bestTruth,
     hintType: normalized.hintType,
+    assignedSet: new Set<number>(),
     mineCount: bestMineSet.size,
     seed,
     report: {
@@ -194,6 +206,55 @@ export function generateMinesForLayout(
         : `${normalized.mineGenerationSystem} system found no guess-free layout in ${attempts} attempts. Try Generate Mines again.`,
     },
   })
+}
+
+export function advancePrototypeMineGeneration(
+  settings: GenerationSettings,
+  phase: LayoutPhaseResult,
+  layoutSeed: number,
+  previousSession: PrototypeMineSession | null,
+  seed: number,
+): { session: PrototypeMineSession; game: GameState } {
+  const normalized = normalizeSettings(settings)
+  const requestedTargetMineCount = clamp(
+    getMineTargetFromActiveCells(phase.activeIndices.length),
+    1,
+    Math.max(1, phase.activeIndices.length - 1),
+  )
+
+  const initialized = previousSession ?? initializePrototypeMineSession(phase, layoutSeed)
+  const session = advancePrototypeMineSession(initialized)
+  const phaseWithStart: LayoutPhaseResult = { ...phase, startIndex: session.startIndex }
+  const truth = createTruthBoard(phase.rows, phase.cols, new Set<number>(), phase.activeMask)
+  const noGuessSolvePassed = deterministicSolveFromStarts(
+    truth,
+    phase.rows,
+    phase.cols,
+    new Set([session.startIndex]),
+    normalized.hintType,
+  )
+  const game = buildGameState({
+    phase: phaseWithStart,
+    truth,
+    hintType: normalized.hintType,
+    assignedSet: session.assignedSet,
+    mineCount: 0,
+    seed,
+    report: {
+      layoutSeed,
+      mineSeed: seed,
+      activeCells: phase.activeIndices.length,
+      targetMines: requestedTargetMineCount,
+      acceptedTargetMines: requestedTargetMineCount,
+      generatedMines: 0,
+      attemptsUsed: session.stepCount,
+      attemptBudget: requestedTargetMineCount,
+      noGuessSolvePassed,
+      note: `prototypeNoop step ${session.stepCount}: start cell assigned and locked (no mine placement yet).`,
+    },
+  })
+
+  return { session, game }
 }
 
 export function makeGame(settings: GenerationSettings, seed: number): GameState {
