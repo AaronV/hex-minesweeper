@@ -1,4 +1,4 @@
-import type { MineGenerationSystem } from '../types'
+import type { GenerationSettings, LayoutPhaseResult, MineGenerationSystem } from '../types'
 
 export interface MineGenerationCandidate {
   startIndex: number
@@ -26,3 +26,13 @@ export interface WeightedMineSession extends BaseMineGenerationSession {
 }
 
 export type MineGenerationSession = SmartMineSession | WeightedMineSession
+
+export interface MineGenerator<TSession extends MineGenerationSession = MineGenerationSession> {
+  initialize: (phase: LayoutPhaseResult, seed: number) => TSession
+  step: (
+    settings: GenerationSettings,
+    phase: LayoutPhaseResult,
+    targetMineCount: number,
+    session: TSession,
+  ) => TSession
+}

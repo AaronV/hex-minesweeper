@@ -1,5 +1,5 @@
-import type { LayoutPhaseResult } from '../../types'
-import type { SmartMineSession } from '../types'
+import type { GenerationSettings, LayoutPhaseResult } from '../../types'
+import type { MineGenerator, SmartMineSession } from '../types'
 import { selectStartIndexRandom } from '../shared'
 
 /**
@@ -21,7 +21,7 @@ import { selectStartIndexRandom } from '../shared'
  * - It separates one-time setup from step execution so "Next Mine Step" can be called repeatedly
  *   without re-initializing state.
  */
-export function initializeSmartMineSession(
+export function initialize(
   phase: LayoutPhaseResult,
   seed: number,
 ): SmartMineSession {
@@ -51,10 +51,14 @@ export function initializeSmartMineSession(
  * - Returning a new session (instead of mutating external state) keeps stepping predictable,
  *   easier to debug, and compatible with auto-step replay.
  */
-export function advanceSmartMineSession(
+export function step(
+  settings: GenerationSettings,
   phase: LayoutPhaseResult,
+  targetMineCount: number,
   session: SmartMineSession,
 ): SmartMineSession {
+  void settings
+  void targetMineCount
   void phase
   return {
     ...session,
@@ -62,4 +66,9 @@ export function advanceSmartMineSession(
     done: session.done,
     lastAction: `tx step ${session.stepCount + 1}: skeleton no-op`,
   }
+}
+
+export const smartMineGenerator: MineGenerator<SmartMineSession> = {
+  initialize,
+  step,
 }

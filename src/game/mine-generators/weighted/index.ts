@@ -1,7 +1,7 @@
 import { clamp, getNeighbors, hashUnit, mulberry32 } from '../../grid'
 import { DEFAULT_MINE_PERCENT } from '../../settings'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
-import type { MineGenerationCandidate, WeightedMineSession } from '../types'
+import type { MineGenerationCandidate, MineGenerator, WeightedMineSession } from '../types'
 import { selectStartIndexCenterBiased } from '../shared'
 
 function weightedPickIndex(weights: number[], random: () => number): number {
@@ -15,7 +15,7 @@ function weightedPickIndex(weights: number[], random: () => number): number {
   return weights.length - 1
 }
 
-export function generateMinesWeighted(
+function generateCandidateWeighted(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   targetMineCount: number,
@@ -60,7 +60,7 @@ export function generateMinesWeighted(
   return { startIndex, mineSet }
 }
 
-export function initializeWeightedMineSession(
+export function initialize(
   phase: LayoutPhaseResult,
   seed: number,
 ): WeightedMineSession {
@@ -76,14 +76,14 @@ export function initializeWeightedMineSession(
   }
 }
 
-export function advanceWeightedMineSession(
+export function step(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   targetMineCount: number,
   session: WeightedMineSession,
 ): WeightedMineSession {
   if (session.done) return session
-  const candidate = generateMinesWeighted(settings, phase, targetMineCount, session.seed)
+  const candidate = generateCandidateWeighted(settings, phase, targetMineCount, session.seed)
   return {
     ...session,
     startIndex: candidate.startIndex,
@@ -92,4 +92,9 @@ export function advanceWeightedMineSession(
     done: true,
     lastAction: `weighted completed in single step with ${candidate.mineSet.size} mines`,
   }
+}
+
+export const weightedMineGenerator: MineGenerator<WeightedMineSession> = {
+  initialize,
+  step,
 }
