@@ -2,18 +2,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, type WorkflowStage } from './components/ControlPanel'
 import {
-  advancePrototypeMineGeneration,
+  advanceMineGeneration,
   applyRightClick,
   DEFAULT_SETTINGS,
   generateLayoutOnly,
-  generateMinesForLayout,
   type GameState,
+  type MineGenerationSession,
   normalizeSettings,
   randomSeed,
   revealCell,
   type GenerationSettings,
   type LayoutPhaseResult,
-  type PrototypeMineSession,
 } from './game'
 
 const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
@@ -60,8 +59,8 @@ function App() {
   const [stage, setStage] = useState<WorkflowStage>('layout')
   const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
   const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
-  const [prototypeMineSession, setPrototypeMineSession] = useState<PrototypeMineSession | null>(null)
-  const [isPrototypeAutoRunning, setIsPrototypeAutoRunning] = useState(false)
+  const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
+  const [isMineAutoStepping, setIsMineAutoStepping] = useState(false)
   const [game, setGame] = useState<GameState | null>(INITIAL_LAYOUT.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [xrayMode, setXrayMode] = useState(false)
@@ -74,11 +73,11 @@ function App() {
       const generated = generateLayoutOnly(next, seed)
       setLayoutSeed(seed)
       setLayoutPhase(generated.phase)
-      setPrototypeMineSession(null)
+      setMineGenerationSession(null)
       setGame(generated.game)
       setStage('layout')
       setUndoGame(null)
-      setIsPrototypeAutoRunning(false)
+      setIsMineAutoStepping(false)
       return next
     })
   }, [seedText])
@@ -88,58 +87,44 @@ function App() {
     const { phase, game: layoutGame } = generateLayoutOnly(settings, seed)
     setLayoutSeed(seed)
     setLayoutPhase(phase)
-    setPrototypeMineSession(null)
+    setMineGenerationSession(null)
     setGame(layoutGame)
     setStage('layout')
     setUndoGame(null)
-    setIsPrototypeAutoRunning(false)
+    setIsMineAutoStepping(false)
   }, [seedText, settings])
 
   const onGenerateMines = useCallback(() => {
     if (!layoutPhase) return
-    if (settings.mineGenerationSystem === 'prototypeNoop') {
-      const baseSeed = parseSeed(seedText)
-      const stepOffset = prototypeMineSession ? prototypeMineSession.stepCount + 1 : 1
-      const result = advancePrototypeMineGeneration(
-        settings,
-        layoutPhase,
-        layoutSeed,
-        prototypeMineSession,
-        baseSeed !== null ? (baseSeed + stepOffset) >>> 0 : randomSeed(),
-      )
-      setPrototypeMineSession(result.session)
-      setGame(result.game)
-      setStage('mines')
-      setUndoGame(null)
-      if (
-        result.session.lastAction === 'no frontier cells available' ||
-        result.session.lastAction.startsWith('transaction failed:')
-      ) {
-        setIsPrototypeAutoRunning(false)
-      }
-      return
-    }
-
-    const mineSeed = parseSeed(seedText) !== null ? ((parseSeed(seedText) ?? 0) + 1) >>> 0 : randomSeed()
-    const next = generateMinesForLayout(settings, layoutPhase, layoutSeed, mineSeed)
-    setPrototypeMineSession(null)
-    setGame(next)
+    const baseSeed = parseSeed(seedText)
+    const stepOffset = mineGenerationSession ? mineGenerationSession.stepCount + 1 : 1
+    const result = advanceMineGeneration(
+      settings,
+      layoutPhase,
+      layoutSeed,
+      mineGenerationSession,
+      baseSeed !== null ? (baseSeed + stepOffset) >>> 0 : randomSeed(),
+    )
+    setMineGenerationSession(result.session)
+    setGame(result.game)
     setStage('mines')
     setUndoGame(null)
-    setIsPrototypeAutoRunning(false)
-  }, [layoutPhase, layoutSeed, prototypeMineSession, seedText, settings])
+    if (result.session.done) {
+      setIsMineAutoStepping(false)
+    }
+  }, [layoutPhase, layoutSeed, mineGenerationSession, seedText, settings])
 
   const onStartPlaying = useCallback(() => {
     if (!game) return
     setStage('play')
     setUndoGame(null)
-    setIsPrototypeAutoRunning(false)
+    setIsMineAutoStepping(false)
   }, [game])
 
-  const onTogglePrototypeAutoRun = useCallback(() => {
-    if (!canGenerateMines || settings.mineGenerationSystem !== 'prototypeNoop') return
-    setIsPrototypeAutoRunning((previous) => !previous)
-  }, [canGenerateMines, settings.mineGenerationSystem])
+  const onToggleMineAutoStep = useCallback(() => {
+    if (!canGenerateMines) return
+    setIsMineAutoStepping((previous) => !previous)
+  }, [canGenerateMines])
 
   useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
@@ -150,16 +135,16 @@ function App() {
   }, [seedText])
 
   useEffect(() => {
-    if (!isPrototypeAutoRunning) return
-    if (settings.mineGenerationSystem !== 'prototypeNoop') return
+    if (!isMineAutoStepping) return
     if (stage !== 'mines' && stage !== 'layout') return
     if (!canGenerateMines) return
+    if (mineGenerationSession?.done) return
 
     const id = window.setInterval(() => {
       onGenerateMines()
     }, 100)
     return () => window.clearInterval(id)
-  }, [canGenerateMines, isPrototypeAutoRunning, onGenerateMines, settings.mineGenerationSystem, stage])
+  }, [canGenerateMines, isMineAutoStepping, mineGenerationSession?.done, onGenerateMines, stage])
 
   const applyMove = useCallback((move: (previous: GameState) => GameState) => {
     setGame((previous) => {
@@ -195,16 +180,17 @@ function App() {
     })
   }, [stage])
 
-  const prototypeAssignmentComplete =
-    settings.mineGenerationSystem === 'prototypeNoop' &&
+  const generationComplete =
     stage === 'mines' &&
-    layoutPhase !== null &&
-    prototypeMineSession !== null &&
-    prototypeMineSession.assignedSet.size >= layoutPhase.activeIndices.length
+    mineGenerationSession !== null &&
+    (mineGenerationSession.system === 'smart'
+      ? layoutPhase !== null && mineGenerationSession.assignedSet.size >= layoutPhase.activeIndices.length
+      : mineGenerationSession.done)
   const canStartPlaying =
     stage === 'mines' &&
     game !== null &&
-    (prototypeAssignmentComplete || (game.mineCount > 0 && game.generationReport.noGuessSolvePassed))
+    generationComplete &&
+    (settings.mineGenerationSystem === 'smart' || (game.mineCount > 0 && game.generationReport.noGuessSolvePassed))
   const effectiveXrayMode = stage !== 'play' ? true : xrayMode
 
   return (
@@ -218,12 +204,12 @@ function App() {
         canUndo={undoGame !== null}
         canGenerateMines={canGenerateMines}
         canStartPlaying={canStartPlaying}
-        isPrototypeAutoRunning={isPrototypeAutoRunning}
-        prototypeStepCount={prototypeMineSession?.stepCount ?? 0}
+        isMineAutoStepping={isMineAutoStepping}
+        mineStepCount={mineGenerationSession?.stepCount ?? 0}
         onGenerateLayout={onGenerateLayout}
         onGenerateMines={onGenerateMines}
         onStartPlaying={onStartPlaying}
-        onTogglePrototypeAutoRun={onTogglePrototypeAutoRun}
+        onToggleMineAutoStep={onToggleMineAutoStep}
         onUndo={onUndo}
         onToggleXrayMode={setXrayMode}
         onSeedTextChange={setSeedText}

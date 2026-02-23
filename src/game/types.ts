@@ -1,7 +1,7 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
 export type MapLayout = 'rectangle' | 'rorschach' | 'snowflake'
 export type HintType = 'adjacent' | 'axisPairLine'
-export type MineGenerationSystem = 'weighted' | 'prototypeNoop'
+export type MineGenerationSystem = 'weighted' | 'smart'
 
 export interface CellTruth {
   active: boolean

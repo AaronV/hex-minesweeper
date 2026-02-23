@@ -11,12 +11,12 @@ interface ControlPanelProps {
   canUndo: boolean
   canGenerateMines: boolean
   canStartPlaying: boolean
-  isPrototypeAutoRunning: boolean
-  prototypeStepCount: number
+  isMineAutoStepping: boolean
+  mineStepCount: number
   onGenerateLayout: () => void
   onGenerateMines: () => void
   onStartPlaying: () => void
-  onTogglePrototypeAutoRun: () => void
+  onToggleMineAutoStep: () => void
   onUndo: () => void
   onToggleXrayMode: (enabled: boolean) => void
   onSeedTextChange: (value: string) => void
@@ -32,21 +32,18 @@ export function ControlPanel({
   canUndo,
   canGenerateMines,
   canStartPlaying,
-  isPrototypeAutoRunning,
-  prototypeStepCount,
+  isMineAutoStepping,
+  mineStepCount,
   onGenerateLayout,
   onGenerateMines,
   onStartPlaying,
-  onTogglePrototypeAutoRun,
+  onToggleMineAutoStep,
   onUndo,
   onToggleXrayMode,
   onSeedTextChange,
   onSettingsChange,
 }: ControlPanelProps) {
-  const mineButtonLabel =
-    settings.mineGenerationSystem === 'prototypeNoop' && stage === 'mines'
-      ? '2. Next Prototype Step'
-      : '2. Generate Mines'
+  const mineButtonLabel = stage === 'mines' ? '2. Next Mine Step' : '2. Generate Mines'
 
   return (
     <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
@@ -90,7 +87,7 @@ export function ControlPanel({
             className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
           >
             <option value="weighted">Weighted</option>
-            <option value="prototypeNoop">Prototype (No-op)</option>
+            <option value="smart">Smart (Stepped)</option>
           </select>
         </label>
 
@@ -209,17 +206,15 @@ export function ControlPanel({
             >
               {mineButtonLabel}
             </button>
-            {settings.mineGenerationSystem === 'prototypeNoop' ? (
-              <label className="flex items-center gap-1 text-xs text-slate-700">
-                <span>Auto-Step</span>
-                <input
-                  type="checkbox"
-                  checked={isPrototypeAutoRunning}
-                  disabled={!canGenerateMines}
-                  onChange={onTogglePrototypeAutoRun}
-                />
-              </label>
-            ) : null}
+            <label className="flex items-center gap-1 text-xs text-slate-700">
+              <span>Auto-Step</span>
+              <input
+                type="checkbox"
+                checked={isMineAutoStepping}
+                disabled={!canGenerateMines}
+                onChange={onToggleMineAutoStep}
+              />
+            </label>
           </div>
           <button
             type="button"
@@ -266,12 +261,8 @@ export function ControlPanel({
           <span className="text-right">
             {game.generationReport.attemptsUsed}/{game.generationReport.attemptBudget}
           </span>
-          {settings.mineGenerationSystem === 'prototypeNoop' ? (
-            <>
-              <span>Prototype Step</span>
-              <span className="text-right font-semibold text-slate-900">{prototypeStepCount}</span>
-            </>
-          ) : null}
+          <span>Generation Step</span>
+          <span className="text-right font-semibold text-slate-900">{mineStepCount}</span>
         </div>
       ) : (
         <p className="mt-3 text-xs text-slate-600">Generate layout to begin.</p>
