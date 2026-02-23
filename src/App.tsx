@@ -11,7 +11,7 @@ import {
   randomSeed,
   revealCell,
   type GenerationSettings,
-  type ShapePhaseResult,
+  type LayoutPhaseResult,
 } from './game'
 
 const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
@@ -31,7 +31,7 @@ function loadInitialSettings(): GenerationSettings {
 function App() {
   const [settings, setSettings] = useState<GenerationSettings>(loadInitialSettings)
   const [stage, setStage] = useState<WorkflowStage>('setup')
-  const [layoutPhase, setLayoutPhase] = useState<ShapePhaseResult | null>(null)
+  const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(null)
   const [layoutSeed, setLayoutSeed] = useState<number>(0)
   const [game, setGame] = useState<GameState | null>(null)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)

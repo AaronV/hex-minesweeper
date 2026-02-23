@@ -1,6 +1,6 @@
 import { clamp, getNeighbors, hashUnit, mulberry32 } from './grid'
 import { DEFAULT_MINE_PERCENT } from './settings'
-import type { GenerationSettings, ShapePhaseResult } from './types'
+import type { GenerationSettings, LayoutPhaseResult } from './types'
 
 function weightedPickIndex(weights: number[], random: () => number): number {
   const total = weights.reduce((sum, value) => sum + value, 0)
@@ -15,7 +15,7 @@ function weightedPickIndex(weights: number[], random: () => number): number {
 
 export function generateMinesFromCA(
   settings: GenerationSettings,
-  phase: ShapePhaseResult,
+  phase: LayoutPhaseResult,
   targetMineCount: number,
   seed: number,
 ): Set<number> {
@@ -39,8 +39,8 @@ export function generateMinesFromCA(
     const dist = Math.hypot(row - startRow, col - startCol)
     const distNorm = clamp(dist / distanceScale, 0, 1.6)
     const localNoise = hashUnit(seed, row, col, settings.propagation)
-    const shapeNoise = hashUnit(seed ^ 0x9e3779b9, col, row, rows + cols)
-    return 0.2 + distNorm * (0.9 * spreadBias) + localNoise * 0.6 + shapeNoise * 0.45
+    const layoutNoise = hashUnit(seed ^ 0x9e3779b9, col, row, rows + cols)
+    return 0.2 + distNorm * (0.9 * spreadBias) + localNoise * 0.6 + layoutNoise * 0.45
   })
 
   const mineSet = new Set<number>()

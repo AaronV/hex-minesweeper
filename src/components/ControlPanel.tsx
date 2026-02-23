@@ -1,4 +1,4 @@
-import type { GameState, GenerationSettings, MapShape } from '../game'
+import type { GameState, GenerationSettings, MapLayout } from '../game'
 
 export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
 
@@ -50,12 +50,12 @@ export function ControlPanel({
       <div className="grid gap-2 text-xs">
         <label className="block">
           <div className="mb-1 flex justify-between">
-            <span>Shape</span>
-            <span className="capitalize">{settings.mapShape}</span>
+            <span>Layout</span>
+            <span className="capitalize">{settings.mapLayout}</span>
           </div>
           <select
-            value={settings.mapShape}
-            onChange={(event) => onSettingsChange({ mapShape: event.target.value as MapShape })}
+            value={settings.mapLayout}
+            onChange={(event) => onSettingsChange({ mapLayout: event.target.value as MapLayout })}
             className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
           >
             <option value="rectangle">Rectangle</option>
@@ -64,7 +64,7 @@ export function ControlPanel({
           </select>
         </label>
 
-        {settings.mapShape === 'rectangle' ? (
+        {settings.mapLayout === 'rectangle' ? (
           <>
             <label className="block">
               <div className="mb-1 flex justify-between">
@@ -130,7 +130,7 @@ export function ControlPanel({
           </>
         )}
 
-        {settings.mapShape === 'snowflake' ? (
+        {settings.mapLayout === 'snowflake' ? (
           <label className="block">
             <div className="mb-1 flex justify-between">
               <span>Snowflake Arms</span>

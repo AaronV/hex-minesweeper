@@ -1,5 +1,5 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
-export type MapShape = 'rectangle' | 'rorschach' | 'snowflake'
+export type MapLayout = 'rectangle' | 'rorschach' | 'snowflake'
 
 export interface CellTruth {
   active: boolean
@@ -16,7 +16,7 @@ export interface CellState extends CellTruth {
 
 export interface GenerationSettings {
   mapSize: number
-  mapShape: MapShape
+  mapLayout: MapLayout
   propagation: number
   snowflakeArms: number
   rectCols: number
@@ -37,14 +37,14 @@ export interface GameState {
 
 export const DEFAULT_SETTINGS: GenerationSettings = {
   mapSize: 14,
-  mapShape: 'rectangle',
+  mapLayout: 'rectangle',
   propagation: 62,
   snowflakeArms: 6,
   rectCols: 20,
   rectRows: 14,
 }
 
-export interface ShapePhaseResult {
+export interface LayoutPhaseResult {
   rows: number
   cols: number
   activeMask: boolean[]
@@ -53,7 +53,7 @@ export interface ShapePhaseResult {
 }
 
 export interface GenerationReport {
-  shapeSeed: number
+  layoutSeed: number
   mineSeed: number
   activeCells: number
   targetMines: number

@@ -1,12 +1,12 @@
 import { clamp, hashUnit, randomSeed } from './grid'
 import { generateMinesFromCA } from './mines'
 import { normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells } from './settings'
-import { generateShapePhase } from './shape'
+import { generateLayoutPhase } from './layout'
 import { deterministicSolveFromStarts } from './solver'
 import { createTruthBoard } from './truth'
 import { applyRightClick, chordReveal, revealCell, toggleFlag } from './transitions'
 import { checkWin } from './truth'
-import type { CellState, CellTruth, GameState, GenerationSettings, ShapePhaseResult } from './types'
+import type { CellState, CellTruth, GameState, GenerationSettings, LayoutPhaseResult } from './types'
 import { DEFAULT_SETTINGS } from './types'
 
 export type {
@@ -15,8 +15,8 @@ export type {
   GameState,
   GameStatus,
   GenerationSettings,
-  MapShape,
-  ShapePhaseResult,
+  MapLayout,
+  LayoutPhaseResult,
 } from './types'
 
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
@@ -24,7 +24,7 @@ export { revealCell, toggleFlag, chordReveal, applyRightClick, checkWin }
 export { getNeighbors } from './grid'
 
 interface BuildGameArgs {
-  phase: ShapePhaseResult
+  phase: LayoutPhaseResult
   truth: CellTruth[]
   mineCount: number
   seed: number
@@ -54,7 +54,7 @@ function buildGameState({ phase, truth, mineCount, seed, report }: BuildGameArgs
   }
 }
 
-function assignStartCell(phase: ShapePhaseResult, seed: number): ShapePhaseResult {
+function assignStartCell(phase: LayoutPhaseResult, seed: number): LayoutPhaseResult {
   if (phase.activeIndices.length === 0) return { ...phase, startIndex: -1 }
   const centerRow = Math.floor(phase.rows / 2)
   const centerCol = Math.floor(phase.cols / 2)
@@ -75,9 +75,9 @@ function assignStartCell(phase: ShapePhaseResult, seed: number): ShapePhaseResul
   return { ...phase, startIndex: band[pickIndex] ?? ranked[0] }
 }
 
-export function generateLayoutOnly(settings: GenerationSettings, seed: number): { phase: ShapePhaseResult; game: GameState } {
+export function generateLayoutOnly(settings: GenerationSettings, seed: number): { phase: LayoutPhaseResult; game: GameState } {
   const normalized = normalizeSettings(settings)
-  const phase = generateShapePhase(normalized, seed)
+  const phase = generateLayoutPhase(normalized, seed)
   const truth = createTruthBoard(phase.rows, phase.cols, new Set<number>(), phase.activeMask)
   const game = buildGameState({
     phase,
@@ -85,7 +85,7 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
     mineCount: 0,
     seed,
     report: {
-      shapeSeed: seed,
+      layoutSeed: seed,
       mineSeed: seed,
       activeCells: phase.activeIndices.length,
       targetMines: 0,
@@ -102,11 +102,11 @@ export function generateLayoutOnly(settings: GenerationSettings, seed: number): 
 
 export function generateMinesForLayout(
   settings: GenerationSettings,
-  phase: ShapePhaseResult,
-  shapeSeed: number,
+  phase: LayoutPhaseResult,
+  layoutSeed: number,
   seed: number,
 ): GameState {
-  const phaseWithStart = assignStartCell(phase, seed ^ shapeSeed)
+  const phaseWithStart = assignStartCell(phase, seed ^ layoutSeed)
   const normalized = normalizeSettings(settings)
   const requestedTargetMineCount = clamp(
     getMineTargetFromActiveCells(phaseWithStart.activeIndices.length),
@@ -164,7 +164,7 @@ export function generateMinesForLayout(
     mineCount: bestMineSet.size,
     seed,
     report: {
-      shapeSeed,
+      layoutSeed,
       mineSeed: seed,
       activeCells: phase.activeIndices.length,
       targetMines: requestedTargetMineCount,
