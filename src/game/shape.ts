@@ -1,4 +1,4 @@
-import { getIndex, getNeighbors, hashUnit, mulberry32, sampleWithoutReplacement } from './grid'
+import { getIndex, getNeighbors, hashUnit } from './grid'
 import { getGridDimensions } from './settings'
 import type { GenerationSettings, ShapePhaseResult } from './types'
 
@@ -232,32 +232,14 @@ function ensureMinimumActiveCells(
   return next
 }
 
-function selectStartCell(activeIndices: number[], rows: number, cols: number, random: () => number): number {
-  if (activeIndices.length === 0) return -1
-  const centerRow = Math.floor(rows / 2)
-  const centerCol = Math.floor(cols / 2)
-  const ranked = [...activeIndices].sort((a, b) => {
-    const ar = Math.floor(a / cols)
-    const ac = a % cols
-    const br = Math.floor(b / cols)
-    const bc = b % cols
-    return Math.hypot(ar - centerRow, ac - centerCol) - Math.hypot(br - centerRow, bc - centerCol)
-  })
-  const band = ranked.slice(0, Math.max(1, Math.floor(ranked.length * 0.5)))
-  const [picked] = sampleWithoutReplacement(band, 1, random)
-  return picked ?? ranked[0]
-}
-
 export function generateShapePhase(settings: GenerationSettings, seed: number): ShapePhaseResult {
   const { cols, rows } = getGridDimensions(settings)
   const total = rows * cols
   const allIndices = Array.from({ length: total }, (_, index) => index)
-  const random = mulberry32(seed ^ 0x6f7a3c11)
 
   let activeMask = generateActiveMask(settings, rows, cols, seed)
   activeMask = ensureMinimumActiveCells(activeMask, rows, cols, 12)
 
   const activeIndices = allIndices.filter((index) => activeMask[index])
-  const startIndex = selectStartCell(activeIndices, rows, cols, random)
-  return { rows, cols, activeMask, activeIndices, startIndex }
+  return { rows, cols, activeMask, activeIndices, startIndex: -1 }
 }

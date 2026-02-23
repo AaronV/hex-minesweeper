@@ -1,11 +1,18 @@
 import type { GameState, GenerationSettings, MapShape } from '../game'
 
+export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
+
 interface ControlPanelProps {
   settings: GenerationSettings
-  game: GameState
+  game: GameState | null
+  stage: WorkflowStage
   xrayMode: boolean
   canUndo: boolean
-  onGenerateLevel: () => void
+  canGenerateMines: boolean
+  canStartPlaying: boolean
+  onGenerateLayout: () => void
+  onGenerateMines: () => void
+  onStartPlaying: () => void
   onUndo: () => void
   onToggleXrayMode: (enabled: boolean) => void
   onSettingsChange: (partial: Partial<GenerationSettings>) => void
@@ -14,9 +21,14 @@ interface ControlPanelProps {
 export function ControlPanel({
   settings,
   game,
+  stage,
   xrayMode,
   canUndo,
-  onGenerateLevel,
+  canGenerateMines,
+  canStartPlaying,
+  onGenerateLayout,
+  onGenerateMines,
+  onStartPlaying,
   onUndo,
   onToggleXrayMode,
   onSettingsChange,
@@ -25,23 +37,14 @@ export function ControlPanel({
     <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h1 className="text-sm font-semibold tracking-wide text-slate-900">Hex Minesweeper</h1>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={!canUndo}
-            className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            onClick={onGenerateLevel}
-            className="rounded bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500"
-          >
-            New Level
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo || stage !== 'play'}
+          className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Undo
+        </button>
       </div>
 
       <div className="grid gap-2 text-xs">
@@ -144,38 +147,70 @@ export function ControlPanel({
           </label>
         ) : null}
 
+        <div className="grid grid-cols-1 gap-1.5">
+          <button
+            type="button"
+            onClick={onGenerateLayout}
+            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+          >
+            1. Generate Layout
+          </button>
+          <button
+            type="button"
+            onClick={onGenerateMines}
+            disabled={!canGenerateMines}
+            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            2. Generate Mines
+          </button>
+          <button
+            type="button"
+            onClick={onStartPlaying}
+            disabled={!canStartPlaying}
+            className="rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            3. Start Playing
+          </button>
+        </div>
+
         <label className="flex items-center justify-between rounded border border-slate-300 bg-white px-2 py-1.5">
           <span>X-Ray (debug)</span>
           <input
             type="checkbox"
             checked={xrayMode}
+            disabled={stage !== 'play'}
             onChange={(event) => onToggleXrayMode(event.target.checked)}
           />
         </label>
-
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
-        <span>Status</span>
-        <span className="text-right font-semibold text-slate-900">
-          {game.status === 'playing' ? 'Playing' : game.status === 'won' ? 'Won' : 'Lost'}
-        </span>
-        <span>Mines</span>
-        <span className="text-right">{game.mineCount}</span>
-        <span>Seed</span>
-        <span className="truncate text-right">{game.seed}</span>
-        <span>Deterministic</span>
-        <span className="text-right">{game.generationReport.deterministicSolvePassed ? 'pass' : 'fail'}</span>
-        <span>Target Mines</span>
-        <span className="text-right">{game.generationReport.targetMines}</span>
-        <span>Generated Mines</span>
-        <span className="text-right">{game.generationReport.generatedMines}</span>
-      </div>
+      {game ? (
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
+          <span>Stage</span>
+          <span className="text-right font-semibold text-slate-900 capitalize">{stage}</span>
+          <span>Status</span>
+          <span className="text-right font-semibold text-slate-900">
+            {game.status === 'playing' ? 'Playing' : game.status === 'won' ? 'Won' : 'Lost'}
+          </span>
+          <span>Mines</span>
+          <span className="text-right">{game.mineCount}</span>
+          <span>Seed</span>
+          <span className="truncate text-right">{game.seed}</span>
+          <span>Deterministic</span>
+          <span className="text-right">{game.generationReport.deterministicSolvePassed ? 'pass' : 'fail'}</span>
+          <span>Target Mines</span>
+          <span className="text-right">{game.generationReport.targetMines}</span>
+          <span>Generated Mines</span>
+          <span className="text-right">{game.generationReport.generatedMines}</span>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-600">Generate layout to begin.</p>
+      )}
 
       <p className="mt-3 text-[11px] text-slate-500">
         Controls: Left click to reveal, right click to flag, drag to pan, wheel to zoom.
       </p>
-      <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p>
+      {game ? <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p> : null}
     </div>
   )
 }

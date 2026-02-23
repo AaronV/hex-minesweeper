@@ -8,13 +8,14 @@ const CONTROL_PANEL_WIDTH = 320
 const CONTROL_PANEL_GUTTER = 12
 
 interface BoardCanvasProps {
-  game: GameState
+  game: GameState | null
   xrayMode: boolean
+  interactive: boolean
   onReveal: (index: number) => void
   onRightClick: (index: number) => void
 }
 
-export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCanvasProps) {
+export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClick }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layoutRef = useRef<BoardLayout | null>(null)
   const [camera, setCamera] = useState<CameraState>({ zoom: 1, panX: 0, panY: 0 })
@@ -33,6 +34,19 @@ export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCan
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    if (!game) {
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      const rect = canvas.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = Math.floor(rect.width * dpr)
+      canvas.height = Math.floor(rect.height * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.fillStyle = '#f8fafc'
+      ctx.fillRect(0, 0, rect.width, rect.height)
+      layoutRef.current = null
+      return
+    }
     layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode)
   }, [camera, game, xrayMode])
 
@@ -66,6 +80,7 @@ export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCan
       const rect = canvas.getBoundingClientRect()
       const x = clientX - rect.left
       const y = clientY - rect.top
+      if (!game) return -1
       return findCellAtPoint(x, y, rect.width, rect.height, layoutRef.current, camera, game)
     },
     [camera, game],
@@ -113,12 +128,11 @@ export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCan
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const drag = dragRef.current
       if (!drag.active || drag.pointerId !== event.pointerId) return
-
-      if (drag.button === 0 && !drag.moved) {
+      if (interactive && drag.button === 0 && !drag.moved) {
         const index = findIndexAtClientPoint(event.clientX, event.clientY)
         if (index >= 0) onReveal(index)
       }
-      if (drag.button === 2 && !drag.moved) {
+      if (interactive && drag.button === 2 && !drag.moved) {
         const index = findIndexAtClientPoint(event.clientX, event.clientY)
         if (index >= 0) onRightClick(index)
       }
@@ -128,7 +142,7 @@ export function BoardCanvas({ game, xrayMode, onReveal, onRightClick }: BoardCan
       dragRef.current.button = -1
       dragRef.current.moved = false
     },
-    [findIndexAtClientPoint, onReveal, onRightClick],
+    [findIndexAtClientPoint, interactive, onReveal, onRightClick],
   )
 
   const onWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
