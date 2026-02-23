@@ -1,7 +1,7 @@
 import { getNeighbors } from '../../grid'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
 import type { MineGenerator, SmartMineSession } from '../types'
-import { buildPickSeed, pickCandidate, pickHintValue } from './utilities'
+import { buildPickSeed, canAcceptMine, pickCandidate, pickCandidates, pickHintValue } from './utilities'
 import { selectStartIndexRandom } from '../shared'
 
 /**
@@ -60,8 +60,9 @@ export function step(
   targetMineCount: number,
   session: SmartMineSession,
 ): SmartMineSession {
+  // 1) Initialize step-scoped inputs used by the deterministic pickers.
   const nextStepCount = session.stepCount + 1
-  const candidates = session.candidateIndices
+const candidates = session.candidateIndices
   const pickSeed = buildPickSeed(
     session.seed,
     phase.rows,
@@ -70,7 +71,7 @@ export function step(
     settings.propagation,
   )
 
-  // If no candidates are available, return an empty message session
+  // 2) Guard clause: if no candidates are available, record and exit this step.
   if (candidates.length === 0) {
     return {
       ...session,
@@ -81,20 +82,41 @@ export function step(
     }
   }
 
-  // Get a target index to work on.
+  // 3) Select one candidate target cell for this transaction tick.
   const targetIndex = pickCandidate(candidates, pickSeed, [])
-  const unassignedTargetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter(
-    (index) => phase.activeMask[index] && !session.assignedSet.has(index),
-  )
+  const targetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
+  const unassignedTargetNeighbors = targetNeighbors.filter((index) => !session.assignedSet.has(index))
+
+  // 4) Pick a hint attempt for the target and stage mine updates to satisfy it.
   const hintValue = pickHintValue(pickSeed, targetIndex, unassignedTargetNeighbors.length)
-  const message = `step ${nextStepCount}: target=${targetIndex}, hint=${hintValue}, candidates=[${candidates.join(', ')}]`
+  const mineSet = new Set(session.mineSet)
+  const existingMinedNeighborCount = targetNeighbors.filter((index) => mineSet.has(index)).length
+  const minesNeeded = Math.max(0, hintValue - existingMinedNeighborCount)
+  const eligibleMineNeighbors = unassignedTargetNeighbors.filter(
+    (index) => !mineSet.has(index) && canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, mineSet),
+  )
+  const pickedMineNeighbors = pickCandidates(eligibleMineNeighbors, pickSeed ^ targetIndex, minesNeeded, [])
+  for (const mineIndex of pickedMineNeighbors) mineSet.add(mineIndex)
+  const finalMinedNeighborCount = targetNeighbors.filter((index) => mineSet.has(index)).length
+  const hintSatisfied = finalMinedNeighborCount === hintValue
+
+  // 5) Record the attempted hint assignment for downstream validation/visualization.
+  const hintAssignments = new Map(session.hintAssignments)
+  hintAssignments.set(targetIndex, hintValue)
+
+  // 6) Emit step telemetry and return the next immutable session snapshot.
+  const message =
+    `step ${nextStepCount}: target=${targetIndex}, hint=${hintValue}, minedNeighbors=${finalMinedNeighborCount}` +
+    `, addedMines=[${pickedMineNeighbors.join(', ')}], valid=${hintSatisfied}`
 
   return {
     ...session,
+    mineSet,
+    hintAssignments,
     messages: [...session.messages, message],
     stepCount: nextStepCount,
     done: session.done,
-    lastAction: `tx step ${nextStepCount}: selected target ${targetIndex} with hint ${hintValue}`,
+    lastAction: `tx step ${nextStepCount}: target ${targetIndex} hint ${hintValue} valid=${hintSatisfied}`,
   }
 }
 
