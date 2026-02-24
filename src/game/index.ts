@@ -260,8 +260,3 @@ export function advanceMineGeneration(
 
   return { session, game }
 }
-
-export function makeGame(settings: GenerationSettings, seed: number): GameState {
-  const { phase } = generateLayoutOnly(settings, seed)
-  return generateMinesForLayout(settings, phase, seed, seed + 4099)
-}
