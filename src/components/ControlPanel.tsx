@@ -1,4 +1,5 @@
 import type { GameState, GenerationSettings, MapLayout } from '../game'
+import { DebugTools } from './DebugTools'
 
 export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
 
@@ -184,8 +185,6 @@ function ActionSection({
   onToggleXrayMode,
   xrayMode,
 }: ActionSectionProps) {
-  const mineButtonLabel = stage === 'mines' ? '2. Next Mine Step' : '2. Generate Mines'
-
   return (
     <>
       <div className="grid grid-cols-1 gap-1.5">
@@ -206,51 +205,18 @@ function ActionSection({
       </div>
 
       {debugToolsEnabled ? (
-        <div className="grid grid-cols-1 gap-1.5 rounded border border-slate-300 bg-slate-50 p-2">
-          <button
-            type="button"
-            onClick={onGenerateLayout}
-            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
-          >
-            1. Generate Layout
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onGenerateMines}
-              disabled={!canGenerateMines}
-              className="flex-1 rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {mineButtonLabel}
-            </button>
-            <label className="flex items-center gap-1 text-xs text-slate-700">
-              <span>Auto-Step</span>
-              <input
-                type="checkbox"
-                checked={isMineAutoStepping}
-                disabled={!canGenerateMines}
-                onChange={onToggleMineAutoStep}
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            onClick={onStartPlaying}
-            disabled={!canStartPlaying}
-            className="rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            3. Start Playing
-          </button>
-          <label className="flex items-center justify-between rounded border border-slate-300 bg-white px-2 py-1.5">
-            <span>X-Ray (debug)</span>
-            <input
-              type="checkbox"
-              checked={xrayMode}
-              disabled={stage !== 'play'}
-              onChange={(event) => onToggleXrayMode(event.target.checked)}
-            />
-          </label>
-        </div>
+        <DebugTools
+          stage={stage}
+          canGenerateMines={canGenerateMines}
+          canStartPlaying={canStartPlaying}
+          isMineAutoStepping={isMineAutoStepping}
+          xrayMode={xrayMode}
+          onGenerateLayout={onGenerateLayout}
+          onGenerateMines={onGenerateMines}
+          onToggleMineAutoStep={onToggleMineAutoStep}
+          onStartPlaying={onStartPlaying}
+          onToggleXrayMode={onToggleXrayMode}
+        />
       ) : null}
     </>
   )
