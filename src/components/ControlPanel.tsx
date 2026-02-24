@@ -77,9 +77,9 @@ export function ControlPanel({
             onChange={(event) => onSettingsChange({ mapLayout: event.target.value as MapLayout })}
             className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
           >
-            <option value="rectangle">Rectangle</option>
             <option value="rorschach">Rorschach Mirror</option>
-            <option value="snowflake">Snowflake</option>
+            <option value="snowflake">Snowflow</option>
+            <option value="rectangle">Rectangle</option>
           </select>
         </label>
 
@@ -287,7 +287,7 @@ export function ControlPanel({
       <p className="mt-3 text-[11px] text-slate-500">
         Controls: Left click to reveal, right click to flag, drag to pan, wheel to zoom.
       </p>
-      {game ? <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p> : null}
+      {debugToolsEnabled && game ? <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p> : null}
     </div>
   )
 }

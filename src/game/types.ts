@@ -42,7 +42,7 @@ export interface GameState {
 
 export const DEFAULT_SETTINGS: GenerationSettings = {
   mapSize: 14,
-  mapLayout: 'rectangle',
+  mapLayout: 'rorschach',
   hintType: 'adjacent',
   propagation: 62,
   snowflakeArms: 6,

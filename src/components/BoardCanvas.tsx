@@ -47,7 +47,7 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
       layoutRef.current = null
       return
     }
-    layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode, !interactive)
+    layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode, !interactive && xrayMode)
   }, [camera, game, interactive, xrayMode])
 
   useEffect(() => {

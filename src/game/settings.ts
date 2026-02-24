@@ -34,7 +34,7 @@ export function estimatePlayableCells(settings: GenerationSettings): number {
 
 export function normalizeSettings(settings: GenerationSettings): GenerationSettings {
   const mapSize = clamp(Math.round(settings.mapSize), 8, 24)
-  const mapLayout: MapLayout = settings.mapLayout ?? 'rectangle'
+  const mapLayout: MapLayout = settings.mapLayout ?? 'rorschach'
   const hintType = settings.hintType === 'axisPairLine' ? 'axisPairLine' : 'adjacent'
   const propagation = clamp(Math.round(settings.propagation), 20, 95)
   const snowflakeArms = settings.snowflakeArms <= 3 ? 3 : 6
