@@ -181,6 +181,17 @@ export function drawGameBoard(
       )
     }
 
+    if (generationPreviewMode && game.generationReport.currentTargetIndex === index) {
+      strokeHex(
+        ctx,
+        position.x,
+        position.y,
+        Math.max(3, drawRadius - Math.max(1.5, drawRadius * 0.15)),
+        'rgba(245, 158, 11, 0.98)',
+        Math.max(1.6, drawRadius * 0.1),
+      )
+    }
+
     drawCellIndex(ctx, position.x, position.y, drawRadius, index)
   }
 

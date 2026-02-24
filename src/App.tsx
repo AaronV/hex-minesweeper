@@ -231,7 +231,7 @@ function App() {
         <div className="max-h-44 overflow-y-auto rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700">
           {generationMessages.length > 0 ? (
             <ul className="space-y-1">
-              {generationMessages.map((message, index) => (
+              {[...generationMessages].reverse().map((message, index) => (
                 <li key={`${index}:${message}`} className="whitespace-pre-wrap">
                   {message}
                 </li>

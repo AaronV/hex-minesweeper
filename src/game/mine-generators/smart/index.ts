@@ -1,7 +1,14 @@
 import { getNeighbors } from '../../grid'
 import type { GenerationSettings, LayoutPhaseResult } from '../../types'
 import type { MineGenerator, SmartMineSession } from '../types'
-import { buildHintAttemptOrder, buildPickSeed, canAcceptMine, pickCandidate, pickCandidates } from './utilities'
+import {
+  buildCandidateIndicesFromAssigned,
+  buildHintAttemptOrder,
+  buildPickSeed,
+  canAcceptMine,
+  pickCandidate,
+  pickCandidates,
+} from './utilities'
 import { selectStartIndexRandom } from '../shared'
 
 /**
@@ -22,13 +29,7 @@ export function initialize(
   const assignedSet = new Set<number>(startIndex >= 0 ? [startIndex] : [])
   const hintAssignments = new Map<number, number>()
   if (startIndex >= 0) hintAssignments.set(startIndex, 0)
-    
-  const candidateIndices =
-    startIndex >= 0
-      ? getNeighbors(startIndex, phase.rows, phase.cols).filter(
-          (index) => phase.activeMask[index] && !assignedSet.has(index),
-        )
-      : []
+  const candidateIndices = buildCandidateIndicesFromAssigned(phase, assignedSet)
 
   return {
     system: 'smart',
@@ -36,6 +37,7 @@ export function initialize(
     assignedSet,
     hintAssignments,
     candidateIndices,
+    currentTargetIndex: -1,
     mineSet: new Set<number>(),
     messages: [],
     stepCount: 0,
@@ -75,6 +77,7 @@ export function step(
   if (candidates.length === 0) {
     return {
       ...session,
+      currentTargetIndex: -1,
       messages: [...session.messages, `step ${nextStepCount}: no candidate cells available`],
       stepCount: nextStepCount,
       done: session.done,
@@ -86,6 +89,28 @@ export function step(
   const targetIndex = pickCandidate(candidates, pickSeed, [])
   const targetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
   const unassignedTargetNeighbors = targetNeighbors.filter((index) => !session.assignedSet.has(index))
+  const assignResolvedNeighborMines = (
+    assignedSet: Set<number>,
+    mineSet: Set<number>,
+  ): number[] => {
+    const autoAssigned: number[] = []
+    let changed = true
+    while (changed) {
+      changed = false
+      const frontier = buildCandidateIndicesFromAssigned(phase, assignedSet)
+      for (const candidateIndex of frontier) {
+        if (!mineSet.has(candidateIndex) || assignedSet.has(candidateIndex)) continue
+        const candidateNeighbors = getNeighbors(candidateIndex, phase.rows, phase.cols).filter(
+          (index) => phase.activeMask[index],
+        )
+        if (!candidateNeighbors.every((index) => assignedSet.has(index))) continue
+        assignedSet.add(candidateIndex)
+        autoAssigned.push(candidateIndex)
+        changed = true
+      }
+    }
+    return autoAssigned
+  }
 
   // 4) Try hint values in deterministic order, rolling back failed attempts.
   const maxHint = Math.min(6, Math.max(0, unassignedTargetNeighbors.length))
@@ -160,17 +185,21 @@ export function step(
   if (acceptedHintValue >= 0 && acceptedMineSet !== null) {
     const assignedSet = new Set(session.assignedSet)
     assignedSet.add(targetIndex)
+    const autoAssignedMines = assignResolvedNeighborMines(assignedSet, acceptedMineSet)
+    const candidateIndices = buildCandidateIndicesFromAssigned(phase, assignedSet)
     const hintAssignments = new Map(session.hintAssignments)
     hintAssignments.set(targetIndex, acceptedHintValue)
     const message = [
       `step ${nextStepCount}: target ${targetIndex}`,
       `  setup: candidates=[${candidates.join(', ')}], unassignedNeighbors=[${unassignedTargetNeighbors.join(', ')}], hintOrder=[${hintAttemptOrder.join(', ')}]`,
       ...attemptLines,
-      `  result: valid=true, acceptedHint=${acceptedHintValue}, addedMines=[${addedMinesForAcceptedAttempt.join(', ')}]`,
+      `  result: valid=true, acceptedHint=${acceptedHintValue}, addedMines=[${addedMinesForAcceptedAttempt.join(', ')}], autoAssigned=[${autoAssignedMines.join(', ')}]`,
     ].join('\n')
     return {
       ...session,
       assignedSet,
+      candidateIndices,
+      currentTargetIndex: targetIndex,
       mineSet: acceptedMineSet,
       hintAssignments,
       messages: [...session.messages, message],
@@ -187,8 +216,11 @@ export function step(
     ...attemptLines,
     '  result: valid=false, no accepted hint',
   ].join('\n')
+  const candidateIndices = buildCandidateIndicesFromAssigned(phase, session.assignedSet)
   return {
     ...session,
+    candidateIndices,
+    currentTargetIndex: targetIndex,
     messages: [...session.messages, invalidMessage],
     stepCount: nextStepCount,
     done: session.done,

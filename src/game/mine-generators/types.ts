@@ -21,6 +21,7 @@ export interface SmartMineSession extends BaseMineGenerationSession {
   assignedSet: Set<number>
   hintAssignments: Map<number, number>
   candidateIndices: number[]
+  currentTargetIndex: number
 }
 
 export interface WeightedMineSession extends BaseMineGenerationSession {

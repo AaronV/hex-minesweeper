@@ -109,3 +109,23 @@ export function canAcceptMine(
   }
   return true
 }
+
+/**
+ * Builds the next candidate frontier from neighbors of all assigned cells,
+ * excluding assigned cells and inactive cells.
+ */
+export function buildCandidateIndicesFromAssigned(
+  phase: LayoutPhaseResult,
+  assignedSet: Set<number>,
+): number[] {
+  const candidateSet = new Set<number>()
+  const assignedIndices = [...assignedSet].sort((a, b) => a - b)
+  for (const assignedIndex of assignedIndices) {
+    for (const neighborIndex of getNeighbors(assignedIndex, phase.rows, phase.cols)) {
+      if (!phase.activeMask[neighborIndex]) continue
+      if (assignedSet.has(neighborIndex)) continue
+      candidateSet.add(neighborIndex)
+    }
+  }
+  return [...candidateSet].sort((a, b) => a - b)
+}

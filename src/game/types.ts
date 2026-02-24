@@ -73,4 +73,5 @@ export interface GenerationReport {
   noGuessSolvePassed: boolean
   note: string
   messageLog: string[]
+  currentTargetIndex: number
 }
