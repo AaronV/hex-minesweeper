@@ -36,13 +36,11 @@ export function normalizeSettings(settings: GenerationSettings): GenerationSetti
   const mapSize = clamp(Math.round(settings.mapSize), 8, 24)
   const mapLayout: MapLayout = settings.mapLayout ?? 'rectangle'
   const hintType = settings.hintType === 'axisPairLine' ? 'axisPairLine' : 'adjacent'
-  const rawMineSystem = String((settings as { mineGenerationSystem?: string }).mineGenerationSystem ?? '')
-  const mineGenerationSystem = rawMineSystem === 'smart' || rawMineSystem === 'prototypeNoop' ? 'smart' : 'weighted'
   const propagation = clamp(Math.round(settings.propagation), 20, 95)
   const snowflakeArms = settings.snowflakeArms <= 3 ? 3 : 6
   const rectCols = clamp(Math.round(settings.rectCols), 8, 40)
   const rectRows = clamp(Math.round(settings.rectRows), 8, 32)
-  return { mapSize, mapLayout, hintType, mineGenerationSystem, propagation, snowflakeArms, rectCols, rectRows }
+  return { mapSize, mapLayout, hintType, propagation, snowflakeArms, rectCols, rectRows }
 }
 
 export function getMineTargetFromActiveCells(activeCells: number): number {

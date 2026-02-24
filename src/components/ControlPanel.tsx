@@ -1,4 +1,4 @@
-import type { GameState, GenerationSettings, MapLayout, MineGenerationSystem } from '../game'
+import type { GameState, GenerationSettings, MapLayout } from '../game'
 
 export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
 
@@ -7,15 +7,18 @@ interface ControlPanelProps {
   seedText: string
   game: GameState | null
   stage: WorkflowStage
+  debugToolsEnabled: boolean
   xrayMode: boolean
   canUndo: boolean
   canGenerateMines: boolean
   canStartPlaying: boolean
   isMineAutoStepping: boolean
   mineStepCount: number
+  onGenerateBoardQuick: () => void
   onGenerateLayout: () => void
   onGenerateMines: () => void
   onStartPlaying: () => void
+  onToggleDebugTools: () => void
   onToggleMineAutoStep: () => void
   onUndo: () => void
   onToggleXrayMode: (enabled: boolean) => void
@@ -28,15 +31,18 @@ export function ControlPanel({
   seedText,
   game,
   stage,
+  debugToolsEnabled,
   xrayMode,
   canUndo,
   canGenerateMines,
   canStartPlaying,
   isMineAutoStepping,
   mineStepCount,
+  onGenerateBoardQuick,
   onGenerateLayout,
   onGenerateMines,
   onStartPlaying,
+  onToggleDebugTools,
   onToggleMineAutoStep,
   onUndo,
   onToggleXrayMode,
@@ -44,6 +50,7 @@ export function ControlPanel({
   onSettingsChange,
 }: ControlPanelProps) {
   const mineButtonLabel = stage === 'mines' ? '2. Next Mine Step' : '2. Generate Mines'
+  const flaggedCount = game ? game.cells.filter((cell) => cell.active && cell.flagged).length : 0
 
   return (
     <div className="fixed left-3 top-3 z-10 w-[320px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-slate-700 shadow-lg backdrop-blur-sm">
@@ -73,21 +80,6 @@ export function ControlPanel({
             <option value="rectangle">Rectangle</option>
             <option value="rorschach">Rorschach Mirror</option>
             <option value="snowflake">Snowflake</option>
-          </select>
-        </label>
-
-        <label className="block">
-          <div className="mb-1 flex justify-between">
-            <span>Mine System</span>
-            <span>{settings.mineGenerationSystem}</span>
-          </div>
-          <select
-            value={settings.mineGenerationSystem}
-            onChange={(event) => onSettingsChange({ mineGenerationSystem: event.target.value as MineGenerationSystem })}
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-          >
-            <option value="weighted">Weighted</option>
-            <option value="smart">Smart (Stepped)</option>
           </select>
         </label>
 
@@ -192,49 +184,67 @@ export function ControlPanel({
         <div className="grid grid-cols-1 gap-1.5">
           <button
             type="button"
-            onClick={onGenerateLayout}
-            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+            onClick={onGenerateBoardQuick}
+            className="rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
           >
-            1. Generate Layout
+            New Board
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onGenerateMines}
-              disabled={!canGenerateMines}
-              className="flex-1 rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {mineButtonLabel}
-            </button>
-            <label className="flex items-center gap-1 text-xs text-slate-700">
-              <span>Auto-Step</span>
-              <input
-                type="checkbox"
-                checked={isMineAutoStepping}
-                disabled={!canGenerateMines}
-                onChange={onToggleMineAutoStep}
-              />
-            </label>
-          </div>
           <button
             type="button"
-            onClick={onStartPlaying}
-            disabled={!canStartPlaying}
-            className="rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={onToggleDebugTools}
+            className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
           >
-            3. Start Playing
+            {debugToolsEnabled ? 'Hide Debug Tools' : 'Show Debug Tools'}
           </button>
         </div>
 
-        <label className="flex items-center justify-between rounded border border-slate-300 bg-white px-2 py-1.5">
-          <span>X-Ray (debug)</span>
-          <input
-            type="checkbox"
-            checked={xrayMode}
-            disabled={stage !== 'play'}
-            onChange={(event) => onToggleXrayMode(event.target.checked)}
-          />
-        </label>
+        {debugToolsEnabled ? (
+          <div className="grid grid-cols-1 gap-1.5 rounded border border-slate-300 bg-slate-50 p-2">
+            <button
+              type="button"
+              onClick={onGenerateLayout}
+              className="rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+            >
+              1. Generate Layout
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onGenerateMines}
+                disabled={!canGenerateMines}
+                className="flex-1 rounded bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {mineButtonLabel}
+              </button>
+              <label className="flex items-center gap-1 text-xs text-slate-700">
+                <span>Auto-Step</span>
+                <input
+                  type="checkbox"
+                  checked={isMineAutoStepping}
+                  disabled={!canGenerateMines}
+                  onChange={onToggleMineAutoStep}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={onStartPlaying}
+              disabled={!canStartPlaying}
+              className="rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white enabled:hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              3. Start Playing
+            </button>
+            <label className="flex items-center justify-between rounded border border-slate-300 bg-white px-2 py-1.5">
+              <span>X-Ray (debug)</span>
+              <input
+                type="checkbox"
+                checked={xrayMode}
+                disabled={stage !== 'play'}
+                onChange={(event) => onToggleXrayMode(event.target.checked)}
+              />
+            </label>
+          </div>
+        ) : null}
       </div>
 
       {game ? (
@@ -246,23 +256,29 @@ export function ControlPanel({
             {game.status === 'playing' ? 'Playing' : game.status === 'won' ? 'Won' : 'Lost'}
           </span>
           <span>Mines</span>
-          <span className="text-right">{game.mineCount}</span>
+          <span className="text-right">
+            {flaggedCount}/{game.mineCount}
+          </span>
           <span>Seed</span>
           <span className="truncate text-right">{game.seed}</span>
-          <span>No-Guess Check</span>
-          <span className="text-right">{game.generationReport.noGuessSolvePassed ? 'pass' : 'fail'}</span>
-          <span>Target Mines</span>
-          <span className="text-right">{game.generationReport.targetMines}</span>
-          <span>Accepted Target</span>
-          <span className="text-right">{game.generationReport.acceptedTargetMines}</span>
-          <span>Generated Mines</span>
-          <span className="text-right">{game.generationReport.generatedMines}</span>
-          <span>Attempts</span>
-          <span className="text-right">
-            {game.generationReport.attemptsUsed}/{game.generationReport.attemptBudget}
-          </span>
-          <span>Generation Step</span>
-          <span className="text-right font-semibold text-slate-900">{mineStepCount}</span>
+          {debugToolsEnabled ? (
+            <>
+              <span>No-Guess Check</span>
+              <span className="text-right">{game.generationReport.noGuessSolvePassed ? 'pass' : 'fail'}</span>
+              <span>Target Mines</span>
+              <span className="text-right">{game.generationReport.targetMines}</span>
+              <span>Accepted Target</span>
+              <span className="text-right">{game.generationReport.acceptedTargetMines}</span>
+              <span>Generated Mines</span>
+              <span className="text-right">{game.generationReport.generatedMines}</span>
+              <span>Attempts</span>
+              <span className="text-right">
+                {game.generationReport.attemptsUsed}/{game.generationReport.attemptBudget}
+              </span>
+              <span>Generation Step</span>
+              <span className="text-right font-semibold text-slate-900">{mineStepCount}</span>
+            </>
+          ) : null}
         </div>
       ) : (
         <p className="mt-3 text-xs text-slate-600">Generate layout to begin.</p>

@@ -30,7 +30,6 @@ export type {
   HintType,
   MapLayout,
   LayoutPhaseResult,
-  MineGenerationSystem,
 } from './types'
 
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
@@ -108,6 +107,7 @@ export function generateMinesForLayout(
   layoutSeed: number,
   seed: number,
 ): GameState {
+  const generationStartMs = Date.now()
   const normalized = normalizeSettings(settings)
   const requestedTargetMineCount = clamp(
     getMineTargetFromActiveCells(phase.activeIndices.length),
@@ -128,7 +128,6 @@ export function generateMinesForLayout(
     for (let attempt = 0; attempt < maxAttemptsPerTarget; attempt += 1) {
       const attemptSeed = seed + target * 104729 + attempt * 9187
       const candidate = generateMinesBySystem(
-        normalized.mineGenerationSystem,
         normalized,
         phase,
         target,
@@ -169,6 +168,7 @@ export function generateMinesForLayout(
     }
     if (bestDeterministic) break
   }
+  const generationDurationMs = Date.now() - generationStartMs
 
   return buildGameState({
     phase: bestPhase,
@@ -188,8 +188,8 @@ export function generateMinesForLayout(
       attemptBudget: (requestedTargetMineCount - minimumTargetMineCount + 1) * maxAttemptsPerTarget,
       noGuessSolvePassed: bestDeterministic,
       note: bestDeterministic
-        ? `${normalized.mineGenerationSystem} system generated mines after ${attempts} attempt${attempts === 1 ? '' : 's'} (target ${bestTarget}).`
-        : `${normalized.mineGenerationSystem} system found no guess-free layout in ${attempts} attempts. Try Generate Mines again.`,
+        ? `Generation time: ${generationDurationMs}ms`
+        : `Generation time: ${generationDurationMs}ms. No guess-free layout found in ${attempts} attempts. Try Generate Mines again.`,
       messageLog: [],
       currentTargetIndex: -1,
     },
@@ -211,7 +211,7 @@ export function advanceMineGeneration(
   )
 
   const initialized =
-    previousSession ?? initializeMineGenerationSession(normalized.mineGenerationSystem, phase, layoutSeed)
+    previousSession ?? initializeMineGenerationSession(phase, layoutSeed)
   const session = advanceMineGenerationSession(normalized, phase, requestedTargetMineCount, initialized)
   const phaseWithStart: LayoutPhaseResult = { ...phase, startIndex: session.startIndex }
   const truth = createTruthBoard(phase.rows, phase.cols, session.mineSet, phase.activeMask)
@@ -233,7 +233,7 @@ export function advanceMineGeneration(
   const assignedSet = session.system === 'smart' ? session.assignedSet : new Set<number>()
   const attemptsUsed = session.stepCount
   const attemptBudget = session.system === 'smart' ? requestedTargetMineCount : 1
-  const notePrefix = session.system === 'smart' ? 'smart tx' : 'weighted step'
+  const notePrefix = 'smart tx'
   const game = buildGameState({
     phase: phaseWithStart,
     truth,
@@ -252,11 +252,9 @@ export function advanceMineGeneration(
       attemptBudget,
       noGuessSolvePassed,
       note:
-        session.system === 'smart'
-          ? `${notePrefix} ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`
-          : `${notePrefix} ${session.stepCount}: ${session.lastAction}`,
+        `${notePrefix} ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`,
       messageLog: session.messages,
-      currentTargetIndex: session.system === 'smart' ? session.currentTargetIndex : -1,
+      currentTargetIndex: session.currentTargetIndex,
     },
   })
 

@@ -6,6 +6,7 @@ import {
   applyRightClick,
   DEFAULT_SETTINGS,
   generateLayoutOnly,
+  generateMinesForLayout,
   type GameState,
   type MineGenerationSession,
   normalizeSettings,
@@ -52,35 +53,58 @@ const INITIAL_SETTINGS = loadInitialSettings()
 const INITIAL_SEED_TEXT = loadInitialSeedText()
 const INITIAL_LAYOUT_SEED = parseSeed(INITIAL_SEED_TEXT) ?? randomSeed()
 const INITIAL_LAYOUT = generateLayoutOnly(INITIAL_SETTINGS, INITIAL_LAYOUT_SEED)
+const INITIAL_GAME = generateMinesForLayout(
+  INITIAL_SETTINGS,
+  INITIAL_LAYOUT.phase,
+  INITIAL_LAYOUT_SEED,
+  (INITIAL_LAYOUT_SEED + 4099) >>> 0,
+)
+
+function buildBoardForMode(settings: GenerationSettings, seed: number, debugToolsEnabled: boolean): {
+  phase: LayoutPhaseResult
+  game: GameState
+  stage: WorkflowStage
+} {
+  const generated = generateLayoutOnly(settings, seed)
+  if (debugToolsEnabled) {
+    return { phase: generated.phase, game: generated.game, stage: 'layout' }
+  }
+  return {
+    phase: generated.phase,
+    game: generateMinesForLayout(settings, generated.phase, seed, (seed + 4099) >>> 0),
+    stage: 'play',
+  }
+}
 
 function App() {
   const [settings, setSettings] = useState<GenerationSettings>(INITIAL_SETTINGS)
   const [seedText, setSeedText] = useState<string>(INITIAL_SEED_TEXT)
-  const [stage, setStage] = useState<WorkflowStage>('layout')
+  const [stage, setStage] = useState<WorkflowStage>('play')
   const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
   const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
   const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
   const [isMineAutoStepping, setIsMineAutoStepping] = useState(false)
-  const [game, setGame] = useState<GameState | null>(INITIAL_LAYOUT.game)
+  const [game, setGame] = useState<GameState | null>(INITIAL_GAME)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [xrayMode, setXrayMode] = useState(false)
+  const [debugToolsEnabled, setDebugToolsEnabled] = useState(false)
   const canGenerateMines = layoutPhase !== null
 
   const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
     setSettings((previous) => {
       const next = normalizeSettings({ ...previous, ...partial })
       const seed = parseSeed(seedText) ?? randomSeed()
-      const generated = generateLayoutOnly(next, seed)
+      const generated = buildBoardForMode(next, seed, debugToolsEnabled)
       setLayoutSeed(seed)
       setLayoutPhase(generated.phase)
       setMineGenerationSession(null)
       setGame(generated.game)
-      setStage('layout')
+      setStage(generated.stage)
       setUndoGame(null)
       setIsMineAutoStepping(false)
       return next
     })
-  }, [seedText])
+  }, [debugToolsEnabled, seedText])
 
   const onGenerateLayout = useCallback(() => {
     const seed = randomSeed()
@@ -91,6 +115,19 @@ function App() {
     setMineGenerationSession(null)
     setGame(layoutGame)
     setStage('layout')
+    setUndoGame(null)
+    setIsMineAutoStepping(false)
+  }, [settings])
+
+  const onGenerateBoardQuick = useCallback(() => {
+    const nextSeed = randomSeed()
+    const generated = buildBoardForMode(settings, nextSeed, false)
+    setSeedText(String(nextSeed))
+    setLayoutSeed(nextSeed)
+    setLayoutPhase(generated.phase)
+    setMineGenerationSession(null)
+    setGame(generated.game)
+    setStage(generated.stage)
     setUndoGame(null)
     setIsMineAutoStepping(false)
   }, [settings])
@@ -191,7 +228,8 @@ function App() {
     stage === 'mines' &&
     game !== null &&
     generationComplete &&
-    (settings.mineGenerationSystem === 'smart' || (game.mineCount > 0 && game.generationReport.noGuessSolvePassed))
+    game.mineCount > 0 &&
+    game.generationReport.noGuessSolvePassed
   const effectiveXrayMode = stage !== 'play' ? true : xrayMode
   const generationMessages = game?.generationReport.messageLog ?? []
 
@@ -202,15 +240,18 @@ function App() {
         seedText={seedText}
         game={game}
         stage={stage}
+        debugToolsEnabled={debugToolsEnabled}
         xrayMode={effectiveXrayMode}
         canUndo={undoGame !== null}
         canGenerateMines={canGenerateMines}
         canStartPlaying={canStartPlaying}
         isMineAutoStepping={isMineAutoStepping}
         mineStepCount={mineGenerationSession?.stepCount ?? 0}
+        onGenerateBoardQuick={onGenerateBoardQuick}
         onGenerateLayout={onGenerateLayout}
         onGenerateMines={onGenerateMines}
         onStartPlaying={onStartPlaying}
+        onToggleDebugTools={() => setDebugToolsEnabled((previous) => !previous)}
         onToggleMineAutoStep={onToggleMineAutoStep}
         onUndo={onUndo}
         onToggleXrayMode={setXrayMode}
@@ -224,25 +265,27 @@ function App() {
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
-      <div className="fixed bottom-3 right-3 z-10 w-[560px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-left text-slate-700 shadow-lg backdrop-blur-sm">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-xs font-semibold tracking-wide text-slate-900">Mine Messages</h2>
-          <span className="text-[11px] text-slate-500">{generationMessages.length}</span>
+      {debugToolsEnabled ? (
+        <div className="fixed bottom-3 right-3 z-10 w-[560px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-left text-slate-700 shadow-lg backdrop-blur-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-semibold tracking-wide text-slate-900">Mine Messages</h2>
+            <span className="text-[11px] text-slate-500">{generationMessages.length}</span>
+          </div>
+          <div className="max-h-44 overflow-y-auto rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700">
+            {generationMessages.length > 0 ? (
+              <ul className="space-y-1">
+                {[...generationMessages].reverse().map((message, index) => (
+                  <li key={`${index}:${message}`} className="whitespace-pre-wrap">
+                    {message}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-slate-500">No generator messages yet.</p>
+            )}
+          </div>
         </div>
-        <div className="max-h-44 overflow-y-auto rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700">
-          {generationMessages.length > 0 ? (
-            <ul className="space-y-1">
-              {[...generationMessages].reverse().map((message, index) => (
-                <li key={`${index}:${message}`} className="whitespace-pre-wrap">
-                  {message}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-slate-500">No generator messages yet.</p>
-          )}
-        </div>
-      </div>
+      ) : null}
     </>
   )
 }
