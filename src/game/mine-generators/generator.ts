@@ -1,8 +1,8 @@
-import { getNeighbors } from '../../grid'
-import { deterministicSolveFromStarts } from '../../solver'
-import { createTruthBoard } from '../../truth'
-import type { GenerationSettings, LayoutPhaseResult } from '../../types'
-import type { MineGenerator, SmartMineSession } from '../types'
+import { getNeighbors } from '../grid'
+import { deterministicSolveFromStarts } from '../solver'
+import { createTruthBoard } from '../truth'
+import type { GenerationSettings, LayoutPhaseResult, MineGenerationSession } from '../types'
+import type { MineGenerator } from './types'
 import {
   buildCandidateIndicesFromAssigned,
   buildHintAttemptOrder,
@@ -11,14 +11,14 @@ import {
   hasForcedNextMove,
   pickCandidates,
 } from './utilities'
-import { selectStartIndexRandom } from '../shared'
+import { selectStartIndexRandom } from './shared'
 
 /**
- * Creates the initial smart generation session for a layout.
+ * Creates the initial generation session for a layout.
  *
  * Why this exists:
  * - The UI and game engine need a stable, serializable session object before any steps run.
- * - It chooses the deterministic start cell for the seed and applies the smart generator's first invariant:
+ * - It chooses the deterministic start cell for the seed and applies the generator's first invariant:
  *   start cell is assigned with adjacent hint value 0.
  * - It separates one-time setup from step execution so "Next Mine Step" can be called repeatedly
  *   without re-initializing state.
@@ -26,7 +26,7 @@ import { selectStartIndexRandom } from '../shared'
 export function initialize(
   phase: LayoutPhaseResult,
   seed: number,
-): SmartMineSession {
+): MineGenerationSession {
   const startIndex = selectStartIndexRandom(phase, seed ^ 0x9e3779b9)
   const assignedSet = new Set<number>(startIndex >= 0 ? [startIndex] : [])
   const hintAssignments = new Map<number, number>()
@@ -34,7 +34,6 @@ export function initialize(
   const candidateIndices = buildCandidateIndicesFromAssigned(phase, assignedSet)
 
   return {
-    system: 'smart',
     startIndex,
     assignedSet,
     hintAssignments,
@@ -50,11 +49,11 @@ export function initialize(
 }
 
 /**
- * Applies exactly one smart transaction step and returns the next session.
+ * Applies exactly one generation transaction step and returns the next session.
  *
  * Why this exists:
  * - The outside caller should not know generator internals; it only asks for "next step".
- * - This function is the single place where step-by-step smart logic evolves over time.
+ * - This function is the single place where step-by-step logic evolves over time.
  * - Returning a new session (instead of mutating external state) keeps stepping predictable,
  *   easier to debug, and compatible with auto-step replay.
  */
@@ -62,8 +61,8 @@ export function step(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   targetMineCount: number,
-  session: SmartMineSession,
-): SmartMineSession {
+  session: MineGenerationSession,
+): MineGenerationSession {
   const passesDeterministicSnapshot = (
     mineSet: Set<number>,
     hintAssignments: Map<number, number>,
@@ -298,7 +297,7 @@ export function step(
   }
 }
 
-export const smartMineGenerator: MineGenerator<SmartMineSession> = {
+export const generator: MineGenerator = {
   initialize,
   step,
 }

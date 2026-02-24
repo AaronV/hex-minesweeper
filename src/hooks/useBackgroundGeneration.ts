@@ -22,7 +22,7 @@ export interface BackgroundGenerationResult {
 
 function getAssignedCount(session: MineGenerationSession | null): number {
   if (!session) return 0
-  return session.system === 'smart' ? session.assignedSet.size : 0
+  return session.assignedSet.size
 }
 
 export function useBackgroundGeneration() {

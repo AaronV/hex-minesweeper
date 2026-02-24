@@ -1,5 +1,5 @@
-import { getNeighbors, hashUnit } from '../../grid'
-import type { LayoutPhaseResult } from '../../types'
+import { getNeighbors, hashUnit } from '../grid'
+import type { LayoutPhaseResult } from '../types'
 
 /**
  * Builds a deterministic pick seed from base seed plus current step context.

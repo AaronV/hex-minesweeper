@@ -58,6 +58,20 @@ export interface LayoutPhaseResult {
   startIndex: number
 }
 
+export interface MineGenerationSession {
+  startIndex: number
+  mineSet: Set<number>
+  messages: string[]
+  stepCount: number
+  seed: number
+  lastAction: string
+  done: boolean
+  assignedSet: Set<number>
+  hintAssignments: Map<number, number>
+  candidateIndices: number[]
+  currentTargetIndex: number
+}
+
 export interface GenerationReport {
   layoutSeed: number
   mineSeed: number

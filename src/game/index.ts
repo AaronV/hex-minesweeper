@@ -1,9 +1,8 @@
 import { clamp, randomSeed } from './grid'
 import {
-  advanceMineGenerationSession,
-  generateMinesBySystem,
-  initializeMineGenerationSession,
-  type MineGenerationSession,
+  advanceGenerationSession,
+  generateMinesForTarget,
+  initializeGenerationSession,
 } from './mine-generators'
 import { normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells } from './settings'
 import { generateLayoutPhase } from './layout'
@@ -18,6 +17,7 @@ import type {
   GenerationSettings,
   HintType,
   LayoutPhaseResult,
+  MineGenerationSession,
 } from './types'
 import { DEFAULT_SETTINGS } from './types'
 
@@ -30,12 +30,12 @@ export type {
   HintType,
   MapLayout,
   LayoutPhaseResult,
+  MineGenerationSession,
 } from './types'
 
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
 export { revealCell, toggleFlag, chordReveal, applyRightClick, checkWin }
 export { getNeighbors } from './grid'
-export type { MineGenerationSession } from './mine-generators'
 
 interface BuildGameArgs {
   phase: LayoutPhaseResult
@@ -127,7 +127,7 @@ export function generateMinesForLayout(
   for (let target = requestedTargetMineCount; target >= minimumTargetMineCount; target -= 1) {
     for (let attempt = 0; attempt < maxAttemptsPerTarget; attempt += 1) {
       const attemptSeed = seed + target * 104729 + attempt * 9187
-      const candidate = generateMinesBySystem(
+      const candidate = generateMinesForTarget(
         normalized,
         phase,
         target,
@@ -211,16 +211,14 @@ export function advanceMineGeneration(
   )
 
   const initialized =
-    previousSession ?? initializeMineGenerationSession(phase, layoutSeed)
-  const session = advanceMineGenerationSession(normalized, phase, requestedTargetMineCount, initialized)
+    previousSession ?? initializeGenerationSession(phase, layoutSeed)
+  const session = advanceGenerationSession(normalized, phase, requestedTargetMineCount, initialized)
   const phaseWithStart: LayoutPhaseResult = { ...phase, startIndex: session.startIndex }
   const truth = createTruthBoard(phase.rows, phase.cols, session.mineSet, phase.activeMask)
-  if (session.system === 'smart') {
-    for (const [index, hintValue] of session.hintAssignments) {
-      if (!truth[index]?.active || truth[index].mine) continue
-      truth[index].adjacentMines = hintValue
-      truth[index].hints.adjacent = hintValue
-    }
+  for (const [index, hintValue] of session.hintAssignments) {
+    if (!truth[index]?.active || truth[index].mine) continue
+    truth[index].adjacentMines = hintValue
+    truth[index].hints.adjacent = hintValue
   }
   const deterministicSolvePassed = deterministicSolveFromStarts(
     truth,
@@ -230,10 +228,9 @@ export function advanceMineGeneration(
     normalized.hintType,
   )
   const noGuessSolvePassed = deterministicSolvePassed
-  const assignedSet = session.system === 'smart' ? session.assignedSet : new Set<number>()
+  const assignedSet = session.assignedSet
   const attemptsUsed = session.stepCount
-  const attemptBudget = session.system === 'smart' ? requestedTargetMineCount : 1
-  const notePrefix = 'smart tx'
+  const attemptBudget = requestedTargetMineCount
   const game = buildGameState({
     phase: phaseWithStart,
     truth,
@@ -252,7 +249,7 @@ export function advanceMineGeneration(
       attemptBudget,
       noGuessSolvePassed,
       note:
-        `${notePrefix} ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`,
+        `tx ${session.stepCount}: ${session.lastAction}. assigned=${session.assignedSet.size}, mines=${session.mineSet.size}`,
       messageLog: session.messages,
       currentTargetIndex: session.currentTargetIndex,
     },

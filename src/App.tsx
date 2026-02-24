@@ -250,9 +250,7 @@ function App() {
   const generationComplete =
     uiState.stage === 'mines' &&
     mineGenerationSession !== null &&
-    (mineGenerationSession.system === 'smart'
-      ? layoutPhase !== null && mineGenerationSession.assignedSet.size >= layoutPhase.activeIndices.length
-      : mineGenerationSession.done)
+    (layoutPhase !== null && mineGenerationSession.assignedSet.size >= layoutPhase.activeIndices.length)
 
   const canStartPlaying =
     uiState.stage === 'mines' &&

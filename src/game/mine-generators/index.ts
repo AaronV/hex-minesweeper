@@ -1,18 +1,15 @@
-import type { GenerationSettings, LayoutPhaseResult } from '../types'
+import type { GenerationSettings, LayoutPhaseResult, MineGenerationSession } from '../types'
+import { generator } from './generator'
 import type {
-  MineGenerator,
   MineGenerationCandidate,
-  MineGenerationSession,
 } from './types'
-import { smartMineGenerator } from './smart'
 
-function runSessionToCompletion<TSession extends MineGenerationSession>(
-  generator: MineGenerator<TSession>,
+function runSessionToCompletion(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   target: number,
   seed: number,
-): TSession {
+): MineGenerationSession {
   let session = generator.initialize(phase, seed)
   const maxSteps = Math.max(1, phase.activeIndices.length * 4)
   for (let step = 0; step < maxSteps && !session.done; step += 1) {
@@ -21,35 +18,34 @@ function runSessionToCompletion<TSession extends MineGenerationSession>(
   return session
 }
 
-export function generateMinesBySystem(
+export function generateMinesForTarget(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   target: number,
   seed: number,
 ): MineGenerationCandidate {
-  const session = runSessionToCompletion(smartMineGenerator, settings, phase, target, seed)
+  const session = runSessionToCompletion(settings, phase, target, seed)
   return { startIndex: session.startIndex, mineSet: session.mineSet }
 }
 
-export function initializeMineGenerationSession(
+export function initializeGenerationSession(
   phase: LayoutPhaseResult,
   seed: number,
 ): MineGenerationSession {
-  return smartMineGenerator.initialize(phase, seed)
+  return generator.initialize(phase, seed)
 }
 
-export function advanceMineGenerationSession(
+export function advanceGenerationSession(
   settings: GenerationSettings,
   phase: LayoutPhaseResult,
   target: number,
   session: MineGenerationSession,
 ): MineGenerationSession {
-  return smartMineGenerator.step(settings, phase, target, session)
+  return generator.step(settings, phase, target, session)
 }
 
 export type {
   MineGenerator,
   MineGenerationCandidate,
-  MineGenerationSession,
-  SmartMineSession,
 } from './types'
+export type { MineGenerationSession } from '../types'

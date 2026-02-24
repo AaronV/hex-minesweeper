@@ -272,7 +272,6 @@ function StatsSection({ game, stage, debugToolsEnabled, mineStepCount }: StatsSe
       </div>
 
       <p className="mt-3 text-[11px] text-slate-500">Controls: Left click to reveal, right click to flag, drag to pan, wheel to zoom.</p>
-      {debugToolsEnabled ? <p className="mt-1 text-[11px] text-slate-500">{game.generationReport.note}</p> : null}
     </>
   )
 }
