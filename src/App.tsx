@@ -7,7 +7,6 @@ import {
   applyRightClick,
   DEFAULT_SETTINGS,
   generateLayoutOnly,
-  generateMinesForLayout,
   type GameState,
   type MineGenerationSession,
   normalizeSettings,
@@ -36,7 +35,7 @@ type UiAction =
   | { type: 'stop_mine_auto_step' }
 
 const INITIAL_UI_STATE: UiState = {
-  stage: 'play',
+  stage: 'setup',
   debugToolsEnabled: false,
   xrayMode: false,
   isMineAutoStepping: false,
@@ -83,22 +82,15 @@ interface InitialAppState {
   settings: GenerationSettings
   seedText: string
   layoutSeed: number
-  layoutPhase: LayoutPhaseResult
-  game: GameState
+  layoutPhase: LayoutPhaseResult | null
+  game: GameState | null
 }
 
 function createInitialAppState(): InitialAppState {
   const settings: GenerationSettings = DEFAULT_SETTINGS
   const layoutSeed = randomSeed()
   const seedText = String(layoutSeed)
-  const { phase } = generateLayoutOnly(settings, layoutSeed)
-  const game = generateMinesForLayout(
-    settings,
-    phase,
-    layoutSeed,
-    (layoutSeed + 4099) >>> 0,
-  )
-  return { settings, seedText, layoutSeed, layoutPhase: phase, game }
+  return { settings, seedText, layoutSeed, layoutPhase: null, game: null }
 }
 
 interface ResetOptions {
@@ -217,6 +209,15 @@ function App() {
     if (!canGenerateMines) return
     dispatchUi({ type: 'toggle_mine_auto_step' })
   }, [canGenerateMines])
+
+  useEffect(() => {
+    if (uiState.debugToolsEnabled) return
+    if (game !== null) return
+    const id = window.requestAnimationFrame(() => {
+      startNonDebugGeneration(settings, layoutSeed)
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [game, layoutSeed, settings, startNonDebugGeneration, uiState.debugToolsEnabled])
 
   useEffect(() => {
     if (!uiState.isMineAutoStepping) return
