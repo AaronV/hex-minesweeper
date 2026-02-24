@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
-import { ControlPanel, type WorkflowStage } from './components/ControlPanel'
+import { ControlPanel } from './components/ControlPanel'
+import type { WorkflowStage } from './app/types'
 import {
   advanceMineGeneration,
   applyRightClick,
@@ -29,7 +30,7 @@ type UiAction =
   | { type: 'show_debug_layout' }
   | { type: 'show_debug_mines' }
   | { type: 'enter_play' }
-  | { type: 'toggle_debug_tools' }
+  | { type: 'set_debug_tools'; enabled: boolean; fallbackStage: WorkflowStage }
   | { type: 'set_xray_mode'; enabled: boolean }
   | { type: 'toggle_mine_auto_step' }
   | { type: 'stop_mine_auto_step' }
@@ -51,8 +52,13 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, stage: 'mines' }
     case 'enter_play':
       return { ...state, stage: 'play', isMineAutoStepping: false }
-    case 'toggle_debug_tools':
-      return { ...state, debugToolsEnabled: !state.debugToolsEnabled, isMineAutoStepping: false }
+    case 'set_debug_tools':
+      return {
+        ...state,
+        debugToolsEnabled: action.enabled,
+        isMineAutoStepping: false,
+        stage: action.enabled || state.stage === 'play' ? state.stage : action.fallbackStage,
+      }
     case 'set_xray_mode':
       return { ...state, xrayMode: action.enabled }
     case 'toggle_mine_auto_step':
@@ -73,16 +79,27 @@ function parseSeed(seedText: string): number | null {
   return normalized
 }
 
-const INITIAL_SETTINGS: GenerationSettings = DEFAULT_SETTINGS
-const INITIAL_LAYOUT_SEED = randomSeed()
-const INITIAL_SEED_TEXT = String(INITIAL_LAYOUT_SEED)
-const INITIAL_LAYOUT = generateLayoutOnly(INITIAL_SETTINGS, INITIAL_LAYOUT_SEED)
-const INITIAL_GAME = generateMinesForLayout(
-  INITIAL_SETTINGS,
-  INITIAL_LAYOUT.phase,
-  INITIAL_LAYOUT_SEED,
-  (INITIAL_LAYOUT_SEED + 4099) >>> 0,
-)
+interface InitialAppState {
+  settings: GenerationSettings
+  seedText: string
+  layoutSeed: number
+  layoutPhase: LayoutPhaseResult
+  game: GameState
+}
+
+function createInitialAppState(): InitialAppState {
+  const settings: GenerationSettings = DEFAULT_SETTINGS
+  const layoutSeed = randomSeed()
+  const seedText = String(layoutSeed)
+  const { phase } = generateLayoutOnly(settings, layoutSeed)
+  const game = generateMinesForLayout(
+    settings,
+    phase,
+    layoutSeed,
+    (layoutSeed + 4099) >>> 0,
+  )
+  return { settings, seedText, layoutSeed, layoutPhase: phase, game }
+}
 
 interface ResetOptions {
   cancelBackground?: boolean
@@ -91,13 +108,14 @@ interface ResetOptions {
 }
 
 function App() {
+  const [initialState] = useState<InitialAppState>(() => createInitialAppState())
   const [uiState, dispatchUi] = useReducer(uiReducer, INITIAL_UI_STATE)
-  const [settings, setSettings] = useState<GenerationSettings>(INITIAL_SETTINGS)
-  const [seedText, setSeedText] = useState<string>(INITIAL_SEED_TEXT)
-  const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
-  const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
+  const [settings, setSettings] = useState<GenerationSettings>(initialState.settings)
+  const [seedText, setSeedText] = useState<string>(initialState.seedText)
+  const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(initialState.layoutPhase)
+  const [layoutSeed, setLayoutSeed] = useState<number>(initialState.layoutSeed)
   const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
-  const [game, setGame] = useState<GameState | null>(INITIAL_GAME)
+  const [game, setGame] = useState<GameState | null>(initialState.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const {
     progress: generationProgress,
@@ -286,7 +304,9 @@ function App() {
         onStartPlaying={onStartPlaying}
         onToggleDebugTools={() => {
           cancelBackgroundGeneration()
-          dispatchUi({ type: 'toggle_debug_tools' })
+          const enabled = !uiState.debugToolsEnabled
+          const fallbackStage: WorkflowStage = game !== null && game.mineCount > 0 ? 'play' : 'setup'
+          dispatchUi({ type: 'set_debug_tools', enabled, fallbackStage })
         }}
         onToggleMineAutoStep={onToggleMineAutoStep}
         onUndo={onUndo}

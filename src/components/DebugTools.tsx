@@ -1,7 +1,7 @@
-type DebugToolsStage = 'setup' | 'layout' | 'mines' | 'play'
+import type { WorkflowStage } from '../app/types'
 
 interface DebugToolsProps {
-  stage: DebugToolsStage
+  stage: WorkflowStage
   canGenerateMines: boolean
   canStartPlaying: boolean
   isMineAutoStepping: boolean

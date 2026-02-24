@@ -1,7 +1,6 @@
 import type { GameState, GenerationSettings, MapLayout } from '../game'
 import { DebugTools } from './DebugTools'
-
-export type WorkflowStage = 'setup' | 'layout' | 'mines' | 'play'
+import type { WorkflowStage } from '../app/types'
 
 interface ControlPanelProps {
   settings: GenerationSettings
