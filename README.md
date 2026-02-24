@@ -1,73 +1,36 @@
-# React + TypeScript + Vite
+# Hex Minesweeper
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Hex Minesweeper is a Minesweeper-style game played on a hex grid.
 
-Currently, two official plugins are available:
+## What Makes It Different
+- Cells have up to 6 neighbors (not 8 like square Minesweeper).
+- Boards are generated to be no-guess solvable by the smart generator.
+- Multiple layout styles are available: Rectangle, Rorschach Mirror, and Snowflake.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Goal
+Reveal every non-mine cell without revealing a mine.
 
-## React Compiler
+## How To Play
+- Your first reveal starts from the designated safe start cell.
+- Number hints tell you how many neighboring cells are mines.
+- Use flags to mark suspected mines.
+- You win when all safe cells are revealed.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Controls
+- Left click: reveal a cell
+- Right click: flag/unflag a hidden cell
+- Right click on a revealed numbered cell: chord reveal (if flags match)
+- Drag: pan the board
+- Mouse wheel: zoom
+- Undo: revert your last move
 
-## Expanding the ESLint configuration
+## UI Notes
+- `New Board` generates a fresh random seed and starts play immediately.
+- `Mines` shows `flagged/total` (for example `58/65`).
+- `Show Debug Tools` reveals stepped generation controls and generator logs.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Running Locally
+```bash
+npm install
+npm run dev
 ```
