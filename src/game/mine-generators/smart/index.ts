@@ -6,6 +6,7 @@ import {
   buildHintAttemptOrder,
   buildPickSeed,
   canAcceptMine,
+  hasForcedNextMove,
   pickCandidate,
   pickCandidates,
 } from './utilities'
@@ -75,12 +76,13 @@ export function step(
 
   // 2) Guard clause: if no candidates are available, record and exit this step.
   if (candidates.length === 0) {
+    const done = session.assignedSet.size >= phase.activeIndices.length
     return {
       ...session,
       currentTargetIndex: -1,
       messages: [...session.messages, `step ${nextStepCount}: no candidate cells available`],
       stepCount: nextStepCount,
-      done: session.done,
+      done,
       lastAction: `tx step ${nextStepCount}: no candidate cells`,
     }
   }
@@ -89,6 +91,8 @@ export function step(
   const targetIndex = pickCandidate(candidates, pickSeed, [])
   const targetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
   const unassignedTargetNeighbors = targetNeighbors.filter((index) => !session.assignedSet.has(index))
+  // Helper for post-commit cleanup: if a mine cell's neighbors are all assigned,
+  // that mine can be safely marked assigned as well.
   const assignResolvedNeighborMines = (
     assignedSet: Set<number>,
     mineSet: Set<number>,
@@ -113,29 +117,41 @@ export function step(
   }
 
   // 4) Try hint values in deterministic order, rolling back failed attempts.
-  const maxHint = Math.min(6, Math.max(0, unassignedTargetNeighbors.length))
-  const hintAttemptOrder = buildHintAttemptOrder(pickSeed, targetIndex, maxHint)
+  const existingMinedNeighborCount = targetNeighbors.filter((index) => session.mineSet.has(index)).length
+  const eligibleMineNeighborCount = unassignedTargetNeighbors.filter(
+    (index) =>
+      !session.mineSet.has(index) &&
+      canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, session.mineSet),
+  ).length
+  const minHint = Math.min(6, Math.max(0, existingMinedNeighborCount))
+  const maxHint = Math.min(6, Math.max(0, existingMinedNeighborCount + eligibleMineNeighborCount))
+  const hintAttemptOrder = buildHintAttemptOrder(pickSeed, targetIndex, minHint, maxHint)
   const attemptLines: string[] = []
   let acceptedHintValue = -1
   let acceptedMineSet: Set<number> | null = null
   let addedMinesForAcceptedAttempt: number[] = []
 
+  // 4a) Attempt each hint in deterministic order. Each attempt is isolated:
+  // failed attempts are rolled back by discarding the temporary mine set.
   for (const hintValue of hintAttemptOrder) {
     const attemptMineSet = new Set(session.mineSet)
-    const existingMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
-    if (existingMinedNeighborCount > hintValue) {
+    const currentMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
+    // Impossible hint: current mines already exceed the hint value.
+    if (currentMinedNeighborCount > hintValue) {
       attemptLines.push(
-        `  - hint ${hintValue}: invalid (already has ${existingMinedNeighborCount} mined neighbors)`,
+        `  - hint ${hintValue}: invalid (already has ${currentMinedNeighborCount} mined neighbors)`,
       )
       continue
     }
 
-    const minesNeeded = hintValue - existingMinedNeighborCount
+    // Determine how many additional mines this hint requires around the target.
+    const minesNeeded = hintValue - currentMinedNeighborCount
     const eligibleMineNeighbors = unassignedTargetNeighbors.filter(
       (index) =>
         !attemptMineSet.has(index) &&
         canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, attemptMineSet),
     )
+    // Not enough legal positions to satisfy this hint.
     if (eligibleMineNeighbors.length < minesNeeded) {
       attemptLines.push(
         `  - hint ${hintValue}: invalid (needs ${minesNeeded}, only ${eligibleMineNeighbors.length} eligible)`,
@@ -156,6 +172,7 @@ export function step(
       attemptMineSet.add(candidate)
       pickedMineNeighbors.push(candidate)
     }
+    // Could not place enough mines after constraint checks.
     if (pickedMineNeighbors.length < minesNeeded) {
       attemptLines.push(
         `  - hint ${hintValue}: invalid (picked ${pickedMineNeighbors.length}/${minesNeeded} mines)`,
@@ -163,10 +180,25 @@ export function step(
       continue
     }
 
+    // Final safety check: placed mines must match the target hint exactly.
     const finalMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
     if (finalMinedNeighborCount !== hintValue) {
       attemptLines.push(
         `  - hint ${hintValue}: invalid (final mined neighbors ${finalMinedNeighborCount})`,
+      )
+      continue
+    }
+
+    // Enforce constructor contract: accepted attempt must leave at least one
+    // forced, non-guess next move for the simulated player.
+    const tentativeAssignedSet = new Set(session.assignedSet)
+    tentativeAssignedSet.add(targetIndex)
+    const tentativeHintAssignments = new Map(session.hintAssignments)
+    tentativeHintAssignments.set(targetIndex, hintValue)
+    const completesBoard = tentativeAssignedSet.size >= phase.activeIndices.length
+    if (!completesBoard && !hasForcedNextMove(phase, tentativeAssignedSet, tentativeHintAssignments, attemptMineSet)) {
+      attemptLines.push(
+        `  - hint ${hintValue}: invalid (would leave no forced next move)`,
       )
       continue
     }
@@ -204,7 +236,7 @@ export function step(
       hintAssignments,
       messages: [...session.messages, message],
       stepCount: nextStepCount,
-      done: session.done,
+      done: assignedSet.size >= phase.activeIndices.length,
       lastAction: `tx step ${nextStepCount}: target ${targetIndex} accepted hint ${acceptedHintValue}`,
     }
   }
@@ -223,7 +255,7 @@ export function step(
     currentTargetIndex: targetIndex,
     messages: [...session.messages, invalidMessage],
     stepCount: nextStepCount,
-    done: session.done,
+    done: session.assignedSet.size >= phase.activeIndices.length,
     lastAction: `tx step ${nextStepCount}: no valid hint for target ${targetIndex}`,
   }
 }

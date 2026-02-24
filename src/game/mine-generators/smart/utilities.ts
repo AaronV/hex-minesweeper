@@ -49,18 +49,23 @@ export function pickHintValue(
 }
 
 /**
- * Builds a deterministic attempt order for hint values in [0..maxHint].
+ * Builds a deterministic attempt order for hint values in [minHint..maxHint].
  */
 export function buildHintAttemptOrder(
   seed: number,
   targetIndex: number,
+  minHint: number,
   maxHint: number,
 ): number[] {
-  const boundedMaxHint = Math.max(0, Math.min(6, maxHint))
-  const values = Array.from({ length: boundedMaxHint + 1 }, (_, hint) => hint)
+  const boundedMinHint = Math.max(0, Math.min(6, minHint))
+  const boundedMaxHint = Math.max(boundedMinHint, Math.min(6, maxHint))
+  const values = Array.from(
+    { length: boundedMaxHint - boundedMinHint + 1 },
+    (_, offset) => boundedMinHint + offset,
+  )
   return values.sort((a, b) => {
-    const ah = hashUnit(seed, targetIndex, a, boundedMaxHint + 1)
-    const bh = hashUnit(seed, targetIndex, b, boundedMaxHint + 1)
+    const ah = hashUnit(seed, targetIndex, a, values.length)
+    const bh = hashUnit(seed, targetIndex, b, values.length)
     if (ah !== bh) return ah - bh
     return a - b
   })
@@ -108,6 +113,33 @@ export function canAcceptMine(
     if (assignedNeighborMines + 1 > assignedHint) return false
   }
   return true
+}
+
+/**
+ * Returns true when the current assigned frontier contains at least one
+ * non-ambiguous forced move for a player-like next step.
+ */
+export function hasForcedNextMove(
+  phase: LayoutPhaseResult,
+  assignedSet: Set<number>,
+  hintAssignments: Map<number, number>,
+  mineSet: Set<number>,
+): boolean {
+  for (const assignedIndex of assignedSet) {
+    const hintValue = hintAssignments.get(assignedIndex)
+    if (hintValue === undefined) continue
+
+    const activeNeighbors = getNeighbors(assignedIndex, phase.rows, phase.cols).filter(
+      (index) => phase.activeMask[index],
+    )
+    const minedNeighborCount = activeNeighbors.filter((index) => mineSet.has(index)).length
+    const unknownNeighbors = activeNeighbors.filter((index) => !mineSet.has(index) && !assignedSet.has(index))
+    if (unknownNeighbors.length === 0) continue
+
+    const remainingMines = hintValue - minedNeighborCount
+    if (remainingMines === 0 || remainingMines === unknownNeighbors.length) return true
+  }
+  return false
 }
 
 /**
