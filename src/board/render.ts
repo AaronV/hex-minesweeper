@@ -88,7 +88,7 @@ function drawCellIndex(
   if (radius < 8) return
   const fontSize = Math.max(8, Math.min(12, radius * 0.4))
   ctx.font = `600 ${fontSize}px "Avenir Next", "Segoe UI", sans-serif`
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.5)'
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.28)'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(String(index), x, y + radius * 0.52)
@@ -159,7 +159,7 @@ export function drawGameBoard(
       }, game.hintType)
     }
 
-    if (cell.assigned) {
+    if (generationPreviewMode && cell.assigned) {
       strokeHex(
         ctx,
         position.x,
@@ -192,7 +192,9 @@ export function drawGameBoard(
       )
     }
 
-    drawCellIndex(ctx, position.x, position.y, drawRadius, index)
+    if (generationPreviewMode) {
+      drawCellIndex(ctx, position.x, position.y, drawRadius, index)
+    }
   }
 
   return layout

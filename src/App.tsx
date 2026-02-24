@@ -83,8 +83,9 @@ function App() {
   }, [seedText])
 
   const onGenerateLayout = useCallback(() => {
-    const seed = parseSeed(seedText) ?? randomSeed()
+    const seed = randomSeed()
     const { phase, game: layoutGame } = generateLayoutOnly(settings, seed)
+    setSeedText(String(seed))
     setLayoutSeed(seed)
     setLayoutPhase(phase)
     setMineGenerationSession(null)
@@ -92,7 +93,7 @@ function App() {
     setStage('layout')
     setUndoGame(null)
     setIsMineAutoStepping(false)
-  }, [seedText, settings])
+  }, [settings])
 
   const onGenerateMines = useCallback(() => {
     if (!layoutPhase) return
