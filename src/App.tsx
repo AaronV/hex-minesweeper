@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, type WorkflowStage } from './components/ControlPanel'
 import {
@@ -15,6 +15,54 @@ import {
   type GenerationSettings,
   type LayoutPhaseResult,
 } from './game'
+import { useBackgroundGeneration } from './hooks/useBackgroundGeneration'
+
+interface UiState {
+  stage: WorkflowStage
+  debugToolsEnabled: boolean
+  xrayMode: boolean
+  isMineAutoStepping: boolean
+}
+
+type UiAction =
+  | { type: 'start_background_generation' }
+  | { type: 'show_debug_layout' }
+  | { type: 'show_debug_mines' }
+  | { type: 'enter_play' }
+  | { type: 'toggle_debug_tools' }
+  | { type: 'set_xray_mode'; enabled: boolean }
+  | { type: 'toggle_mine_auto_step' }
+  | { type: 'stop_mine_auto_step' }
+
+const INITIAL_UI_STATE: UiState = {
+  stage: 'play',
+  debugToolsEnabled: false,
+  xrayMode: false,
+  isMineAutoStepping: false,
+}
+
+function uiReducer(state: UiState, action: UiAction): UiState {
+  switch (action.type) {
+    case 'start_background_generation':
+      return { ...state, stage: 'setup', isMineAutoStepping: false }
+    case 'show_debug_layout':
+      return { ...state, stage: 'layout', isMineAutoStepping: false }
+    case 'show_debug_mines':
+      return { ...state, stage: 'mines' }
+    case 'enter_play':
+      return { ...state, stage: 'play', isMineAutoStepping: false }
+    case 'toggle_debug_tools':
+      return { ...state, debugToolsEnabled: !state.debugToolsEnabled, isMineAutoStepping: false }
+    case 'set_xray_mode':
+      return { ...state, xrayMode: action.enabled }
+    case 'toggle_mine_auto_step':
+      return { ...state, isMineAutoStepping: !state.isMineAutoStepping }
+    case 'stop_mine_auto_step':
+      return { ...state, isMineAutoStepping: false }
+    default:
+      return state
+  }
+}
 
 function parseSeed(seedText: string): number | null {
   const trimmed = seedText.trim()
@@ -23,11 +71,6 @@ function parseSeed(seedText: string): number | null {
   if (!Number.isFinite(parsed)) return null
   const normalized = Math.floor(Math.abs(parsed)) >>> 0
   return normalized
-}
-
-function getAssignedCount(session: MineGenerationSession | null): number {
-  if (!session) return 0
-  return session.system === 'smart' ? session.assignedSet.size : 0
 }
 
 const INITIAL_SETTINGS: GenerationSettings = DEFAULT_SETTINGS
@@ -41,112 +84,86 @@ const INITIAL_GAME = generateMinesForLayout(
   (INITIAL_LAYOUT_SEED + 4099) >>> 0,
 )
 
+interface ResetOptions {
+  cancelBackground?: boolean
+  clearSession?: boolean
+  clearUndo?: boolean
+}
+
 function App() {
+  const [uiState, dispatchUi] = useReducer(uiReducer, INITIAL_UI_STATE)
   const [settings, setSettings] = useState<GenerationSettings>(INITIAL_SETTINGS)
   const [seedText, setSeedText] = useState<string>(INITIAL_SEED_TEXT)
-  const [stage, setStage] = useState<WorkflowStage>('play')
   const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(INITIAL_LAYOUT.phase)
   const [layoutSeed, setLayoutSeed] = useState<number>(INITIAL_LAYOUT_SEED)
   const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
-  const [isMineAutoStepping, setIsMineAutoStepping] = useState(false)
   const [game, setGame] = useState<GameState | null>(INITIAL_GAME)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
-  const [xrayMode, setXrayMode] = useState(false)
-  const [debugToolsEnabled, setDebugToolsEnabled] = useState(false)
-  const [generationProgress, setGenerationProgress] = useState<{ assigned: number; total: number } | null>(null)
-  const backgroundGenerationRunIdRef = useRef(0)
+  const {
+    progress: generationProgress,
+    start: startBackgroundGeneration,
+    cancel: cancelBackgroundGeneration,
+  } = useBackgroundGeneration()
+
   const canGenerateMines = layoutPhase !== null
 
-  const cancelBackgroundGeneration = useCallback(() => {
-    backgroundGenerationRunIdRef.current += 1
-    setGenerationProgress(null)
-  }, [])
+  const resetTransientUiState = useCallback(
+    ({ cancelBackground = true, clearSession = true, clearUndo = true }: ResetOptions = {}) => {
+      if (cancelBackground) cancelBackgroundGeneration()
+      if (clearSession) setMineGenerationSession(null)
+      if (clearUndo) setUndoGame(null)
+      dispatchUi({ type: 'stop_mine_auto_step' })
+    },
+    [cancelBackgroundGeneration],
+  )
 
-  const startNonDebugGeneration = useCallback((nextSettings: GenerationSettings, seed: number) => {
-    const runId = backgroundGenerationRunIdRef.current + 1
-    backgroundGenerationRunIdRef.current = runId
+  const startNonDebugGeneration = useCallback(
+    (nextSettings: GenerationSettings, seed: number) => {
+      resetTransientUiState()
+      dispatchUi({ type: 'start_background_generation' })
+      startBackgroundGeneration(nextSettings, seed, (result) => {
+        setLayoutSeed(result.seed)
+        setLayoutPhase(result.phase)
+        setMineGenerationSession(result.session)
+        setGame(result.game)
+        setUndoGame(null)
+        dispatchUi({ type: 'enter_play' })
+      })
+    },
+    [resetTransientUiState, startBackgroundGeneration],
+  )
 
-    const { phase } = generateLayoutOnly(nextSettings, seed)
-    const total = Math.max(1, phase.activeIndices.length)
+  const onSettingsChange = useCallback(
+    (partial: Partial<GenerationSettings>) => {
+      const next = normalizeSettings({ ...settings, ...partial })
+      const seed = parseSeed(seedText) ?? randomSeed()
+      setSettings(next)
 
-    setStage('setup')
-    setUndoGame(null)
-    setIsMineAutoStepping(false)
-    setMineGenerationSession(null)
-    setGenerationProgress({ assigned: 0, total })
-
-    const stepsPerFrame = 12
-    let session: MineGenerationSession | null = null
-    let finalGame: GameState | null = null
-
-    const runFrame = () => {
-      if (backgroundGenerationRunIdRef.current !== runId) return
-
-      let latestSession = session
-      let latestGame: GameState | null = null
-      for (let step = 0; step < stepsPerFrame; step += 1) {
-        const stepOffset = latestSession ? latestSession.stepCount + 1 : 1
-        const stepSeed = (seed + stepOffset) >>> 0
-        const result = advanceMineGeneration(nextSettings, phase, seed, latestSession, stepSeed)
-        latestSession = result.session
-        latestGame = result.game
-        if (latestSession.done) break
-      }
-
-      session = latestSession
-      setGenerationProgress({ assigned: getAssignedCount(latestSession), total })
-      if (latestGame) finalGame = latestGame
-
-      if (latestSession?.done) {
-        if (backgroundGenerationRunIdRef.current !== runId) return
-        if (finalGame) {
-          setLayoutSeed(seed)
-          setLayoutPhase(phase)
-          setMineGenerationSession(latestSession)
-          setGame(finalGame)
-        }
-        setStage('play')
-        setGenerationProgress(null)
+      if (uiState.debugToolsEnabled) {
+        resetTransientUiState()
+        const { phase, game: layoutGame } = generateLayoutOnly(next, seed)
+        setLayoutSeed(seed)
+        setLayoutPhase(phase)
+        setGame(layoutGame)
+        dispatchUi({ type: 'show_debug_layout' })
         return
       }
-      window.requestAnimationFrame(runFrame)
-    }
 
-    window.requestAnimationFrame(runFrame)
-  }, [])
-
-  const onSettingsChange = useCallback((partial: Partial<GenerationSettings>) => {
-    const next = normalizeSettings({ ...settings, ...partial })
-    const seed = parseSeed(seedText) ?? randomSeed()
-    setSettings(next)
-    if (debugToolsEnabled) {
-      cancelBackgroundGeneration()
-      const { phase, game: layoutGame } = generateLayoutOnly(next, seed)
-      setLayoutSeed(seed)
-      setLayoutPhase(phase)
-      setMineGenerationSession(null)
-      setGame(layoutGame)
-      setStage('layout')
-      setUndoGame(null)
-      setIsMineAutoStepping(false)
-      return
-    }
-    startNonDebugGeneration(next, seed)
-  }, [cancelBackgroundGeneration, debugToolsEnabled, seedText, settings, startNonDebugGeneration])
+      startNonDebugGeneration(next, seed)
+    },
+    [resetTransientUiState, seedText, settings, startNonDebugGeneration, uiState.debugToolsEnabled],
+  )
 
   const onGenerateLayout = useCallback(() => {
-    cancelBackgroundGeneration()
+    resetTransientUiState()
     const seed = randomSeed()
     const { phase, game: layoutGame } = generateLayoutOnly(settings, seed)
     setSeedText(String(seed))
     setLayoutSeed(seed)
     setLayoutPhase(phase)
-    setMineGenerationSession(null)
     setGame(layoutGame)
-    setStage('layout')
-    setUndoGame(null)
-    setIsMineAutoStepping(false)
-  }, [cancelBackgroundGeneration, settings])
+    dispatchUi({ type: 'show_debug_layout' })
+  }, [resetTransientUiState, settings])
 
   const onGenerateBoardQuick = useCallback(() => {
     const nextSeed = randomSeed()
@@ -165,42 +182,36 @@ function App() {
       mineGenerationSession,
       baseSeed !== null ? (baseSeed + stepOffset) >>> 0 : randomSeed(),
     )
+
+    resetTransientUiState({ cancelBackground: false, clearSession: false })
     setMineGenerationSession(result.session)
     setGame(result.game)
-    setStage('mines')
-    setUndoGame(null)
-    if (result.session.done) {
-      setIsMineAutoStepping(false)
-    }
-  }, [layoutPhase, layoutSeed, mineGenerationSession, seedText, settings])
+    dispatchUi({ type: 'show_debug_mines' })
+  }, [layoutPhase, layoutSeed, mineGenerationSession, resetTransientUiState, seedText, settings])
 
   const onStartPlaying = useCallback(() => {
     if (!game) return
-    setStage('play')
-    setUndoGame(null)
-    setIsMineAutoStepping(false)
-  }, [game])
+    resetTransientUiState({ cancelBackground: false, clearSession: false })
+    dispatchUi({ type: 'enter_play' })
+  }, [game, resetTransientUiState])
 
   const onToggleMineAutoStep = useCallback(() => {
     if (!canGenerateMines) return
-    setIsMineAutoStepping((previous) => !previous)
+    dispatchUi({ type: 'toggle_mine_auto_step' })
   }, [canGenerateMines])
 
-  useEffect(() => () => {
-    backgroundGenerationRunIdRef.current += 1
-  }, [])
-
   useEffect(() => {
-    if (!isMineAutoStepping) return
-    if (stage !== 'mines' && stage !== 'layout') return
+    if (!uiState.isMineAutoStepping) return
+    if (uiState.stage !== 'mines' && uiState.stage !== 'layout') return
     if (!canGenerateMines) return
     if (mineGenerationSession?.done) return
 
     const id = window.setInterval(() => {
       onGenerateMines()
     }, 100)
+
     return () => window.clearInterval(id)
-  }, [canGenerateMines, isMineAutoStepping, mineGenerationSession?.done, onGenerateMines, stage])
+  }, [canGenerateMines, mineGenerationSession?.done, onGenerateMines, uiState.isMineAutoStepping, uiState.stage])
 
   const applyMove = useCallback((move: (previous: GameState) => GameState) => {
     setGame((previous) => {
@@ -213,44 +224,46 @@ function App() {
 
   const onReveal = useCallback(
     (index: number) => {
-      if (stage !== 'play') return
+      if (uiState.stage !== 'play') return
       applyMove((previous) => revealCell(previous, index))
     },
-    [applyMove, stage],
+    [applyMove, uiState.stage],
   )
 
   const onRightClick = useCallback(
     (index: number) => {
-      if (stage !== 'play') return
+      if (uiState.stage !== 'play') return
       applyMove((previous) => applyRightClick(previous, index))
     },
-    [applyMove, stage],
+    [applyMove, uiState.stage],
   )
 
   const onUndo = useCallback(() => {
-    if (stage !== 'play') return
+    if (uiState.stage !== 'play') return
     setUndoGame((previousUndo) => {
       if (!previousUndo) return previousUndo
       setGame(previousUndo)
       return null
     })
-  }, [stage])
+  }, [uiState.stage])
 
   const generationComplete =
-    stage === 'mines' &&
+    uiState.stage === 'mines' &&
     mineGenerationSession !== null &&
     (mineGenerationSession.system === 'smart'
       ? layoutPhase !== null && mineGenerationSession.assignedSet.size >= layoutPhase.activeIndices.length
       : mineGenerationSession.done)
+
   const canStartPlaying =
-    stage === 'mines' &&
+    uiState.stage === 'mines' &&
     game !== null &&
     generationComplete &&
     game.mineCount > 0 &&
     game.generationReport.noGuessSolvePassed
-  const effectiveXrayMode = debugToolsEnabled ? (stage !== 'play' ? true : xrayMode) : false
+
+  const effectiveXrayMode = uiState.debugToolsEnabled ? (uiState.stage !== 'play' ? true : uiState.xrayMode) : false
   const generationMessages = game?.generationReport.messageLog ?? []
-  const progressVisible = !debugToolsEnabled && generationProgress !== null
+  const progressVisible = !uiState.debugToolsEnabled && generationProgress !== null
   const progressRatio = progressVisible
     ? Math.max(0, Math.min(1, generationProgress.assigned / generationProgress.total))
     : 0
@@ -261,29 +274,32 @@ function App() {
         settings={settings}
         seedText={seedText}
         game={game}
-        stage={stage}
-        debugToolsEnabled={debugToolsEnabled}
+        stage={uiState.stage}
+        debugToolsEnabled={uiState.debugToolsEnabled}
         xrayMode={effectiveXrayMode}
         canUndo={undoGame !== null}
         canGenerateMines={canGenerateMines}
         canStartPlaying={canStartPlaying}
-        isMineAutoStepping={isMineAutoStepping}
+        isMineAutoStepping={uiState.isMineAutoStepping}
         mineStepCount={mineGenerationSession?.stepCount ?? 0}
         onGenerateBoardQuick={onGenerateBoardQuick}
         onGenerateLayout={onGenerateLayout}
         onGenerateMines={onGenerateMines}
         onStartPlaying={onStartPlaying}
-        onToggleDebugTools={() => setDebugToolsEnabled((previous) => !previous)}
+        onToggleDebugTools={() => {
+          cancelBackgroundGeneration()
+          dispatchUi({ type: 'toggle_debug_tools' })
+        }}
         onToggleMineAutoStep={onToggleMineAutoStep}
         onUndo={onUndo}
-        onToggleXrayMode={setXrayMode}
+        onToggleXrayMode={(enabled) => dispatchUi({ type: 'set_xray_mode', enabled })}
         onSeedTextChange={setSeedText}
         onSettingsChange={onSettingsChange}
       />
       <BoardCanvas
         game={game}
         xrayMode={effectiveXrayMode}
-        interactive={stage === 'play'}
+        interactive={uiState.stage === 'play'}
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
@@ -303,7 +319,7 @@ function App() {
           </div>
         </div>
       ) : null}
-      {debugToolsEnabled ? (
+      {uiState.debugToolsEnabled ? (
         <div className="fixed bottom-3 right-3 z-10 w-[560px] rounded-lg border border-slate-300/90 bg-white/88 p-3 text-left text-slate-700 shadow-lg backdrop-blur-sm">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xs font-semibold tracking-wide text-slate-900">Mine Messages</h2>
