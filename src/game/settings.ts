@@ -7,6 +7,10 @@ export function getGridDimensions(settings: GenerationSettings): { cols: number;
   if (settings.mapLayout === 'rectangle') {
     return { cols: settings.rectCols, rows: settings.rectRows }
   }
+  if (settings.mapLayout === 'hexesOfHexes') {
+    const size = settings.mapSize
+    return { cols: size * 2 + 14, rows: size * 2 + 10 }
+  }
   const size = settings.mapSize
   if (settings.mapLayout === 'rorschach') {
     // Keep odd cols/rows so both vertical and horizontal mirror modes have a true center axis.
@@ -22,6 +26,9 @@ function estimateActiveRatio(settings: GenerationSettings): number {
   if (settings.mapLayout === 'rorschach') {
     return clamp(0.28 + settings.propagation * 0.0038, 0.26, 0.66)
   }
+  if (settings.mapLayout === 'hexesOfHexes') {
+    return clamp(0.08 + settings.propagation * 0.0026, 0.1, 0.34)
+  }
   const armFactor = (settings.snowflakeArms - 3) * 0.028
   return clamp(0.26 + armFactor + settings.propagation * 0.0034, 0.24, 0.78)
 }
@@ -34,7 +41,11 @@ export function estimatePlayableCells(settings: GenerationSettings): number {
 
 export function normalizeSettings(settings: GenerationSettings): GenerationSettings {
   const mapSize = clamp(Math.round(settings.mapSize), 8, 24)
-  const mapLayout: MapLayout = settings.mapLayout ?? 'rorschach'
+  // Temporarily disable buggy layout generator until fixed.
+  const mapLayout: MapLayout =
+    settings.mapLayout === 'hexesOfHexes'
+      ? 'rorschach'
+      : (settings.mapLayout ?? 'rorschach')
   const hintType = settings.hintType === 'axisPairLine' ? 'axisPairLine' : 'adjacent'
   const propagation = clamp(Math.round(settings.propagation), 20, 95)
   const snowflakeArms = settings.snowflakeArms <= 3 ? 3 : 6

@@ -34,12 +34,19 @@ interface LayoutSectionProps {
 }
 
 function LayoutSection({ settings, seedText, onSeedTextChange, onSettingsChange }: LayoutSectionProps) {
+  const layoutLabel =
+    settings.mapLayout === 'rorschach'
+      ? 'Rorschach Mirror'
+      : settings.mapLayout === 'snowflake'
+        ? 'Snowflow'
+        : 'Rectangle'
+
   return (
     <>
       <label className="block">
         <div className="mb-1 flex justify-between">
           <span>Layout</span>
-          <span className="capitalize">{settings.mapLayout}</span>
+          <span>{layoutLabel}</span>
         </div>
         <select
           value={settings.mapLayout}

@@ -1,4 +1,5 @@
 export { generateRectangleMask } from './rectangle'
 export { generateRorschachMask } from './rorschach'
 export { generateSnowflakeMask } from './snowflake'
+export { generateHexesOfHexesMask } from './hexes-of-hexes'
 export { ensureMinimumActiveCells } from './shared'

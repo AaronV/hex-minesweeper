@@ -125,7 +125,7 @@ export function drawGameBoard(
   ctx.fillRect(0, 0, width, height)
 
   const layout = computeLayout(width, height, game.rows, game.cols)
-  const unsolvedCellTint = getUnsolvedCellTint(game.seed)
+  const unsolvedCellTint = getUnsolvedCellTint(game.generationReport.layoutSeed)
   let hoveredHintTargets: Set<number> | null = null
 
   if (hoveredHintIndex !== null && hoveredHintIndex >= 0 && hoveredHintIndex < game.cells.length) {

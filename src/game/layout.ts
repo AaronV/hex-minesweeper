@@ -2,6 +2,7 @@ import { getGridDimensions } from './settings'
 import type { GenerationSettings, LayoutPhaseResult } from './types'
 import {
   ensureMinimumActiveCells,
+  generateHexesOfHexesMask,
   generateRectangleMask,
   generateRorschachMask,
   generateSnowflakeMask,
@@ -19,6 +20,9 @@ function generateActiveMask(
   if (settings.mapLayout === 'rorschach') {
     return generateRorschachMask(rows, cols, settings.propagation, seed)
   }
+  if (settings.mapLayout === 'hexesOfHexes') {
+    return generateHexesOfHexesMask(rows, cols, settings.propagation, seed)
+  }
   return generateSnowflakeMask(rows, cols, settings.propagation, settings.snowflakeArms, settings.mapSize, seed)
 }
 
@@ -28,7 +32,8 @@ export function generateLayoutPhase(settings: GenerationSettings, seed: number):
   const allIndices = Array.from({ length: total }, (_, index) => index)
 
   let activeMask = generateActiveMask(settings, rows, cols, seed)
-  activeMask = ensureMinimumActiveCells(activeMask, rows, cols, 12)
+  const minimumActiveCells = settings.mapLayout === 'hexesOfHexes' ? 1 : 12
+  activeMask = ensureMinimumActiveCells(activeMask, rows, cols, minimumActiveCells)
 
   const activeIndices = allIndices.filter((index) => activeMask[index])
   return { rows, cols, activeMask, activeIndices, startIndex: -1 }

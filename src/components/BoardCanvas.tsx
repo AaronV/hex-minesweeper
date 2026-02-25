@@ -1,21 +1,76 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { drawGameBoard, findCellAtPoint, type BoardLayout, type CameraState } from '../board'
 import type { GameState } from '../game'
+import { computeLayout } from '../board/layout'
 
 const INITIAL_ZOOM = 0.9
 const CONTROL_PANEL_LEFT = 12
 const CONTROL_PANEL_WIDTH = 320
 const CONTROL_PANEL_GUTTER = 12
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function computeCenteredCamera(game: GameState | null, canvas: HTMLCanvasElement): CameraState {
+  const rect = canvas.getBoundingClientRect()
+  const blockedLeft = CONTROL_PANEL_LEFT + CONTROL_PANEL_WIDTH + CONTROL_PANEL_GUTTER
+  const targetCenterX = (blockedLeft + rect.width) / 2
+  const targetCenterY = rect.height / 2
+
+  if (!game) {
+    return {
+      zoom: INITIAL_ZOOM,
+      panX: targetCenterX - rect.width / 2,
+      panY: 0,
+    }
+  }
+
+  const layout = computeLayout(rect.width, rect.height, game.rows, game.cols)
+  const activeCenters = layout.centers.filter((_, index) => game.cells[index]?.active)
+  if (activeCenters.length === 0) {
+    return {
+      zoom: INITIAL_ZOOM,
+      panX: targetCenterX - rect.width / 2,
+      panY: 0,
+    }
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const center of activeCenters) {
+    if (center.x < minX) minX = center.x
+    if (center.x > maxX) maxX = center.x
+    if (center.y < minY) minY = center.y
+    if (center.y > maxY) maxY = center.y
+  }
+
+  const activeCenterX = (minX + maxX) / 2
+  const activeCenterY = (minY + maxY) / 2
+  const activeWidth = Math.max(layout.radius * Math.sqrt(3), maxX - minX + layout.radius * Math.sqrt(3))
+  const activeHeight = Math.max(layout.radius * 2, maxY - minY + layout.radius * 2)
+  const availableWidth = Math.max(180, rect.width - blockedLeft - 20)
+  const availableHeight = Math.max(180, rect.height - 24)
+  const fitZoom = Math.min(availableWidth / activeWidth, availableHeight / activeHeight)
+  const zoom = clamp(fitZoom * 0.95, 0.45, 3)
+
+  const panX = targetCenterX - ((activeCenterX - rect.width / 2) * zoom + rect.width / 2)
+  const panY = targetCenterY - ((activeCenterY - rect.height / 2) * zoom + rect.height / 2)
+  return { zoom, panX, panY }
+}
+
 interface BoardCanvasProps {
   game: GameState | null
   xrayMode: boolean
   interactive: boolean
+  recenterToken?: number
   onReveal: (index: number) => void
   onRightClick: (index: number) => void
 }
 
-export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClick }: BoardCanvasProps) {
+export function BoardCanvas({ game, xrayMode, interactive, recenterToken = 0, onReveal, onRightClick }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layoutRef = useRef<BoardLayout | null>(null)
   const [camera, setCamera] = useState<CameraState>({ zoom: 1, panX: 0, panY: 0 })
@@ -63,16 +118,16 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
     if (initializedCameraRef.current) return
     const canvas = canvasRef.current
     if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const blockedLeft = CONTROL_PANEL_LEFT + CONTROL_PANEL_WIDTH + CONTROL_PANEL_GUTTER
-    const targetCenterX = (blockedLeft + rect.width) / 2
-    setCamera({
-      zoom: INITIAL_ZOOM,
-      panX: targetCenterX - rect.width / 2,
-      panY: 0,
-    })
+    setCamera(computeCenteredCamera(game, canvas))
     initializedCameraRef.current = true
-  }, [])
+  }, [game])
+
+  useEffect(() => {
+    if (!initializedCameraRef.current) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    setCamera(computeCenteredCamera(game, canvas))
+  }, [recenterToken])
 
   const findIndexAtClientPoint = useCallback(
     (clientX: number, clientY: number): number => {

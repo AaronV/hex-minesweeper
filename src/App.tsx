@@ -107,6 +107,7 @@ function App() {
   const [seedText, setSeedText] = useState<string>(initialState.seedText)
   const [layoutPhase, setLayoutPhase] = useState<LayoutPhaseResult | null>(initialState.layoutPhase)
   const [layoutSeed, setLayoutSeed] = useState<number>(initialState.layoutSeed)
+  const [layoutRecenterToken, setLayoutRecenterToken] = useState(0)
   const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
   const [game, setGame] = useState<GameState | null>(initialState.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
@@ -173,6 +174,7 @@ function App() {
     setLayoutSeed(seed)
     setLayoutPhase(phase)
     setGame(layoutGame)
+    setLayoutRecenterToken((previous) => previous + 1)
     dispatchUi({ type: 'show_debug_layout' })
   }, [resetTransientUiState, settings])
 
@@ -320,6 +322,7 @@ function App() {
         game={game}
         xrayMode={effectiveXrayMode}
         interactive={uiState.stage === 'play'}
+        recenterToken={layoutRecenterToken}
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
