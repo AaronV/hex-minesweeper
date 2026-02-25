@@ -2,6 +2,7 @@ import type { CellTruth, HintType } from '../types'
 import { adjacentHintStrategy } from './adjacent'
 import { axisPairLineHintStrategy } from './axis-pair-line'
 import type { HintRenderContext, HintVisibilityContext, HintStrategy } from './types'
+export { getHintTargetCells, getUnsolvedHintTargets, hasActionableHintTargets } from './targets'
 
 const hintStrategies: Record<HintType, HintStrategy> = {
   adjacent: adjacentHintStrategy,

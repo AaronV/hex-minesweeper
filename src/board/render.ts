@@ -1,5 +1,6 @@
 import type { GameState } from '../game/types'
-import { getCellHintValue, renderHint, shouldShowHint } from '../game/hint-types'
+import { getCellHintValue, getHintTargetCells, renderHint, shouldShowHint } from '../game/hint-types'
+import { hashUnit } from '../game/grid'
 import { computeLayout, toScreen } from './layout'
 import type { BoardLayout, CameraState } from './types'
 
@@ -94,12 +95,20 @@ function drawCellIndex(
   ctx.fillText(String(index), x, y + radius * 0.52)
 }
 
+function getUnsolvedCellTint(seed: number): string {
+  const hue = Math.round(hashUnit(seed ^ 0x5bf0a12d, 11, 23, 47) * 360)
+  const saturation = Math.round(58 + hashUnit(seed ^ 0x1f8b7219, 3, 17, 71) * 16)
+  const lightness = Math.round(52 + hashUnit(seed ^ 0x8e6f3ad1, 7, 29, 89) * 12)
+  return `hsla(${hue}, ${saturation}%, ${lightness}%, 0.56)`
+}
+
 export function drawGameBoard(
   canvas: HTMLCanvasElement,
   game: GameState,
   camera: CameraState,
   xrayMode = false,
   generationPreviewMode = false,
+  hoveredHintIndex: number | null = null,
 ): BoardLayout | null {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
@@ -116,6 +125,16 @@ export function drawGameBoard(
   ctx.fillRect(0, 0, width, height)
 
   const layout = computeLayout(width, height, game.rows, game.cols)
+  const unsolvedCellTint = getUnsolvedCellTint(game.seed)
+  let hoveredHintTargets: Set<number> | null = null
+
+  if (hoveredHintIndex !== null && hoveredHintIndex >= 0 && hoveredHintIndex < game.cells.length) {
+    const hoverHintIsVisible = shouldShowHint({ game, index: hoveredHintIndex, xrayMode }, game.hintType)
+    if (hoverHintIsVisible) {
+      const targetIndices = getHintTargetCells(game, hoveredHintIndex)
+      if (targetIndices.length > 0) hoveredHintTargets = new Set(targetIndices)
+    }
+  }
 
   for (let index = 0; index < game.cells.length; index += 1) {
     const cell = game.cells[index]
@@ -127,15 +146,15 @@ export function drawGameBoard(
       (xrayMode && cell.mine) || (game.status === 'lost' && cell.mine) || ((cell.revealed || previewOpen) && cell.mine)
     const hidden = !(cell.revealed || previewOpen)
     const hintValue = getCellHintValue(cell, game.hintType)
+    const hoverHighlighted = hoveredHintTargets?.has(index) ?? false
 
-    let fill = 'rgba(248, 250, 252, 1)'
+    let fill = 'rgba(226, 232, 240, 0.98)'
 
     if (hidden) {
-      fill = cell.flagged ? 'rgba(191, 219, 254, 0.98)' : 'rgba(203, 213, 225, 0.96)'
+      fill = cell.flagged ? 'rgba(191, 219, 254, 0.98)' : unsolvedCellTint
     } else if (cell.mine) {
       fill = cell.exploded ? 'rgba(254, 202, 202, 0.98)' : 'rgba(254, 226, 226, 0.96)'
     }
-
     const position = toScreen(center.x, center.y, width, height, camera)
     const drawRadius = layout.radius * camera.zoom - 0.8
     if (drawRadius < 4) continue
@@ -167,6 +186,17 @@ export function drawGameBoard(
         Math.max(4, drawRadius - 0.35),
         'rgba(15, 23, 42, 0.95)',
         Math.max(1.2, drawRadius * 0.07),
+      )
+    }
+
+    if (hoverHighlighted) {
+      strokeHex(
+        ctx,
+        position.x,
+        position.y,
+        Math.max(3, drawRadius - 0.7),
+        'rgba(148, 163, 184, 0.58)',
+        Math.max(1, drawRadius * 0.045),
       )
     }
 

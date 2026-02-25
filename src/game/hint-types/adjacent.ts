@@ -1,21 +1,7 @@
-import { getNeighbors } from '../grid'
-import type { GameState } from '../types'
 import type { HintStrategy } from './types'
+import { hasActionableHintTargets } from './targets'
 
 const adjacentColors = ['', '#2563eb', '#16a34a', '#dc2626', '#b45309', '#7c3aed', '#0891b2']
-
-function hasActionableUnknownAdjacent(game: GameState, index: number): boolean {
-  for (const neighbor of getNeighbors(index, game.rows, game.cols)) {
-    if (
-      game.cells[neighbor].active &&
-      !game.cells[neighbor].revealed &&
-      !game.cells[neighbor].flagged
-    ) {
-      return true
-    }
-  }
-  return false
-}
 
 export const adjacentHintStrategy: HintStrategy = {
   type: 'adjacent',
@@ -29,7 +15,7 @@ export const adjacentHintStrategy: HintStrategy = {
     if (value <= 0) return false
     if (xrayMode) return true
     if (!cell.revealed) return false
-    return hasActionableUnknownAdjacent(game, index)
+    return hasActionableHintTargets(game, index)
   },
   renderHint: ({ ctx, value, x, y, radius }) => {
     const fontSize = Math.max(9, radius * 0.55)

@@ -19,6 +19,7 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layoutRef = useRef<BoardLayout | null>(null)
   const [camera, setCamera] = useState<CameraState>({ zoom: 1, panX: 0, panY: 0 })
+  const [hoveredCellIndex, setHoveredCellIndex] = useState<number | null>(null)
   const initializedCameraRef = useRef(false)
   const dragRef = useRef({
     pointerId: -1,
@@ -47,8 +48,8 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
       layoutRef.current = null
       return
     }
-    layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode, !interactive && xrayMode)
-  }, [camera, game, interactive, xrayMode])
+    layoutRef.current = drawGameBoard(canvas, game, camera, xrayMode, !interactive && xrayMode, hoveredCellIndex)
+  }, [camera, game, hoveredCellIndex, interactive, xrayMode])
 
   useEffect(() => {
     draw()
@@ -108,21 +109,25 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current
-    if (!drag.active || drag.pointerId !== event.pointerId) return
-    if (drag.button !== 0) return
+    if (drag.active && drag.pointerId === event.pointerId && drag.button === 0) {
+      const deltaX = event.clientX - drag.startX
+      const deltaY = event.clientY - drag.startY
+      if (Math.abs(deltaX) + Math.abs(deltaY) > 4) {
+        dragRef.current.moved = true
+      }
 
-    const deltaX = event.clientX - drag.startX
-    const deltaY = event.clientY - drag.startY
-    if (Math.abs(deltaX) + Math.abs(deltaY) > 4) {
-      dragRef.current.moved = true
+      setCamera((previous) => ({
+        ...previous,
+        panX: drag.startPanX + deltaX,
+        panY: drag.startPanY + deltaY,
+      }))
+      return
     }
 
-    setCamera((previous) => ({
-      ...previous,
-      panX: drag.startPanX + deltaX,
-      panY: drag.startPanY + deltaY,
-    }))
-  }, [])
+    if (drag.active && drag.pointerId === event.pointerId) return
+    const index = findIndexAtClientPoint(event.clientX, event.clientY)
+    setHoveredCellIndex((previous) => (previous === index ? previous : index >= 0 ? index : null))
+  }, [findIndexAtClientPoint])
 
   const onPointerUp = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -136,6 +141,8 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
         const index = findIndexAtClientPoint(event.clientX, event.clientY)
         if (index >= 0) onRightClick(index)
       }
+      const hoverIndex = findIndexAtClientPoint(event.clientX, event.clientY)
+      setHoveredCellIndex((previous) => (previous === hoverIndex ? previous : hoverIndex >= 0 ? hoverIndex : null))
 
       dragRef.current.active = false
       dragRef.current.pointerId = -1
@@ -175,6 +182,7 @@ export function BoardCanvas({ game, xrayMode, interactive, onReveal, onRightClic
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={() => setHoveredCellIndex(null)}
       onWheel={onWheel}
       onContextMenu={(event) => event.preventDefault()}
     />
