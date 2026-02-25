@@ -1,5 +1,7 @@
 import { getNeighbors, hashUnit } from '../grid'
+import { countMinesInCells, getConstraintCellsForHintSpec } from '../hint-constraints'
 import type { LayoutPhaseResult } from '../types'
+import type { AssignedHintSpec } from '../types'
 
 /**
  * Builds a deterministic pick seed from base seed plus current step context.
@@ -23,8 +25,8 @@ export function buildHintAttemptOrder(
   minHint: number,
   maxHint: number,
 ): number[] {
-  const boundedMinHint = Math.max(0, Math.min(6, minHint))
-  const boundedMaxHint = Math.max(boundedMinHint, Math.min(6, maxHint))
+  const boundedMinHint = Math.max(0, minHint)
+  const boundedMaxHint = Math.max(boundedMinHint, maxHint)
   const values = Array.from(
     { length: boundedMaxHint - boundedMinHint + 1 },
     (_, offset) => boundedMinHint + offset,
@@ -64,19 +66,15 @@ export function pickCandidates(
 export function canAcceptMine(
   candidateIndex: number,
   phase: LayoutPhaseResult,
-  assignedSet: Set<number>,
-  hintAssignments: Map<number, number>,
+  _assignedSet: Set<number>,
+  hintAssignments: Map<number, AssignedHintSpec>,
   mineSet: Set<number>,
 ): boolean {
-  const candidateNeighbors = getNeighbors(candidateIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
-  for (const assignedNeighborIndex of candidateNeighbors) {
-    if (!assignedSet.has(assignedNeighborIndex)) continue
-    const assignedHint = hintAssignments.get(assignedNeighborIndex)
-    if (assignedHint === undefined) continue
-    const assignedNeighborMines = getNeighbors(assignedNeighborIndex, phase.rows, phase.cols).filter(
-      (index) => phase.activeMask[index] && mineSet.has(index),
-    ).length
-    if (assignedNeighborMines + 1 > assignedHint) return false
+  for (const [assignedHintIndex, assignedHint] of hintAssignments) {
+    const scope = getConstraintCellsForHintSpec(assignedHintIndex, assignedHint, phase.rows, phase.cols, phase.activeMask)
+    if (!scope.includes(candidateIndex)) continue
+    const assignedMines = countMinesInCells(scope, mineSet)
+    if (assignedMines + 1 > assignedHint.value) return false
   }
   return true
 }
@@ -88,22 +86,17 @@ export function canAcceptMine(
 export function hasForcedNextMove(
   phase: LayoutPhaseResult,
   assignedSet: Set<number>,
-  hintAssignments: Map<number, number>,
+  hintAssignments: Map<number, AssignedHintSpec>,
   mineSet: Set<number>,
 ): boolean {
-  for (const assignedIndex of assignedSet) {
-    const hintValue = hintAssignments.get(assignedIndex)
-    if (hintValue === undefined) continue
-
-    const activeNeighbors = getNeighbors(assignedIndex, phase.rows, phase.cols).filter(
-      (index) => phase.activeMask[index],
-    )
-    const minedNeighborCount = activeNeighbors.filter((index) => mineSet.has(index)).length
-    const unknownNeighbors = activeNeighbors.filter((index) => !mineSet.has(index) && !assignedSet.has(index))
-    if (unknownNeighbors.length === 0) continue
-
-    const remainingMines = hintValue - minedNeighborCount
-    if (remainingMines === 0 || remainingMines === unknownNeighbors.length) return true
+  for (const [assignedIndex, hintSpec] of hintAssignments) {
+    if (!assignedSet.has(assignedIndex)) continue
+    const scope = getConstraintCellsForHintSpec(assignedIndex, hintSpec, phase.rows, phase.cols, phase.activeMask)
+    const minedCount = countMinesInCells(scope, mineSet)
+    const unknownSafeCells = scope.filter((cell) => !mineSet.has(cell) && !assignedSet.has(cell))
+    if (unknownSafeCells.length === 0) continue
+    const remainingMines = hintSpec.value - minedCount
+    if (remainingMines === 0 || remainingMines === unknownSafeCells.length) return true
   }
   return false
 }

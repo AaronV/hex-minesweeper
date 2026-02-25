@@ -25,7 +25,7 @@ export function generateMinesForTarget(
   seed: number,
 ): MineGenerationCandidate {
   const session = runSessionToCompletion(settings, phase, target, seed)
-  return { startIndex: session.startIndex, mineSet: session.mineSet }
+  return { startIndex: session.startIndex, mineSet: session.mineSet, hintAssignments: session.hintAssignments }
 }
 
 export function initializeGenerationSession(

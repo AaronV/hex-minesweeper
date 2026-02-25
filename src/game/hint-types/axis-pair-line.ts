@@ -13,12 +13,14 @@ export const axisPairLineHintStrategy: HintStrategy = {
     if (xrayMode) return true
     return cell.revealed
   },
-  renderHint: ({ ctx, value, x, y, radius }) => {
+  renderHint: ({ ctx, game, index, value, x, y, radius }) => {
+    const axisPair = game.cells[index]?.axisPair ?? 0
+    const glyph = axisPair === 1 ? '↗↙' : axisPair === 2 ? '↔' : '↖↘'
     const fontSize = Math.max(8, radius * 0.46)
     ctx.fillStyle = '#0f766e'
     ctx.font = `700 ${fontSize}px "Avenir Next", sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(`${value}↔`, x, y + 1)
+    ctx.fillText(`${value}${glyph}`, x, y + 1)
   },
 }

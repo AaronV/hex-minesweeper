@@ -1,8 +1,9 @@
-import type { GenerationSettings, LayoutPhaseResult, MineGenerationSession } from '../types'
+import type { AssignedHintSpec, GenerationSettings, LayoutPhaseResult, MineGenerationSession } from '../types'
 
 export interface MineGenerationCandidate {
   startIndex: number
   mineSet: Set<number>
+  hintAssignments: Map<number, AssignedHintSpec>
 }
 
 export interface MineGenerator {

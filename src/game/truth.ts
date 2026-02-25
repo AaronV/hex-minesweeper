@@ -1,4 +1,5 @@
 import { getNeighbors } from './grid'
+import { getConstraintCellsForHintCell } from './hint-constraints'
 import { isZeroExpansionHint } from './hint-types'
 import type { CellState, CellTruth, HintType } from './types'
 
@@ -18,6 +19,8 @@ export function createTruthBoard(
       mine: active && mineSet.has(index),
       adjacentMines: 0,
       hints: { adjacent: 0, axisPairLine: 0 },
+      hintKind: 'adjacent',
+      axisPair: null,
     }
   }
 
@@ -42,6 +45,7 @@ export function revealCellRegion(
   hintType: HintType,
 ): void {
   const queue = [startIndex]
+  const activeMask = cells.map((cell) => cell.active)
 
   while (queue.length > 0) {
     const current = queue.shift()
@@ -52,7 +56,7 @@ export function revealCellRegion(
     cell.revealed = true
     if (!isZeroExpansionHint(cell, hintType) || cell.mine) continue
 
-    for (const neighbor of getNeighbors(current, rows, cols)) {
+    for (const neighbor of getConstraintCellsForHintCell(current, cell, rows, cols, activeMask)) {
       const neighborCell = cells[neighbor]
       if (neighborCell.active && !neighborCell.revealed && !neighborCell.flagged && !neighborCell.mine) {
         queue.push(neighbor)

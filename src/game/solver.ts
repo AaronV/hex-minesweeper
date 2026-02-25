@@ -1,4 +1,4 @@
-import { getNeighbors } from './grid'
+import { getConstraintCellsForHintCell } from './hint-constraints'
 import { getCellHintValue, isZeroExpansionHint } from './hint-types'
 import type { CellTruth, HintType } from './types'
 
@@ -23,6 +23,7 @@ function revealForSolver(
   hintType: HintType,
 ): boolean {
   const queue = [startIndex]
+  const activeMask = truth.map((cell) => cell.active)
   while (queue.length > 0) {
     const current = queue.shift()
     if (current === undefined) continue
@@ -31,7 +32,7 @@ function revealForSolver(
     if (!cell.active || cell.mine) return false
     revealed[current] = true
     if (!isZeroExpansionHint(cell, hintType)) continue
-    for (const neighbor of getNeighbors(current, rows, cols)) {
+    for (const neighbor of getConstraintCellsForHintCell(current, cell, rows, cols, activeMask)) {
       const n = truth[neighbor]
       if (n.active && !n.mine && !revealed[neighbor] && !flagged[neighbor]) {
         queue.push(neighbor)
@@ -50,13 +51,14 @@ function collectConstraints(
   hintType: HintType,
 ): SolverConstraint[] | null {
   const constraints: SolverConstraint[] = []
+  const activeMask = truth.map((cell) => cell.active)
   for (let index = 0; index < truth.length; index += 1) {
     const cell = truth[index]
     if (!cell.active || !revealed[index] || cell.mine) continue
-    const neighbors = getNeighbors(index, rows, cols).filter((neighbor) => truth[neighbor].active)
-    const unknown = neighbors.filter((n) => !revealed[n] && !flagged[n]).sort((a, b) => a - b)
+    const scope = getConstraintCellsForHintCell(index, cell, rows, cols, activeMask)
+    const unknown = scope.filter((n) => !revealed[n] && !flagged[n]).sort((a, b) => a - b)
     if (unknown.length === 0) continue
-    const flaggedCount = neighbors.filter((n) => flagged[n]).length
+    const flaggedCount = scope.filter((n) => flagged[n]).length
     const remaining = getCellHintValue(cell, hintType) - flaggedCount
     if (remaining < 0 || remaining > unknown.length) return null
     constraints.push({ unknown, remaining })

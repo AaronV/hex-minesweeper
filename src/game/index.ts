@@ -11,6 +11,7 @@ import { createTruthBoard } from './truth'
 import { applyRightClick, chordReveal, revealCell, toggleFlag } from './transitions'
 import { checkWin } from './truth'
 import type {
+  AssignedHintSpec,
   CellState,
   CellTruth,
   GameState,
@@ -45,6 +46,21 @@ interface BuildGameArgs {
   mineCount: number
   seed: number
   report: GameState['generationReport']
+}
+
+function applyHintAssignmentsToTruth(truth: CellTruth[], hintAssignments: Map<number, AssignedHintSpec>): void {
+  for (const [index, hintSpec] of hintAssignments) {
+    const cell = truth[index]
+    if (!cell?.active || cell.mine) continue
+    cell.hintKind = hintSpec.kind
+    cell.axisPair = hintSpec.kind === 'axisPairLine' ? (hintSpec.axisPair ?? 0) : null
+    if (hintSpec.kind === 'axisPairLine') {
+      cell.hints.axisPairLine = hintSpec.value
+    } else {
+      cell.adjacentMines = hintSpec.value
+      cell.hints.adjacent = hintSpec.value
+    }
+  }
 }
 
 function buildGameState({ phase, truth, hintType, assignedSet, mineCount, seed, report }: BuildGameArgs): GameState {
@@ -140,6 +156,7 @@ export function generateMinesForLayout(
         candidate.mineSet,
         candidatePhase.activeMask,
       )
+      applyHintAssignmentsToTruth(candidateTruth, candidate.hintAssignments)
       const deterministic = deterministicSolveFromStarts(
         candidateTruth,
         candidatePhase.rows,
@@ -215,11 +232,7 @@ export function advanceMineGeneration(
   const session = advanceGenerationSession(normalized, phase, requestedTargetMineCount, initialized)
   const phaseWithStart: LayoutPhaseResult = { ...phase, startIndex: session.startIndex }
   const truth = createTruthBoard(phase.rows, phase.cols, session.mineSet, phase.activeMask)
-  for (const [index, hintValue] of session.hintAssignments) {
-    if (!truth[index]?.active || truth[index].mine) continue
-    truth[index].adjacentMines = hintValue
-    truth[index].hints.adjacent = hintValue
-  }
+  applyHintAssignmentsToTruth(truth, session.hintAssignments)
   const deterministicSolvePassed = deterministicSolveFromStarts(
     truth,
     phase.rows,

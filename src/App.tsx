@@ -97,6 +97,7 @@ interface ResetOptions {
   cancelBackground?: boolean
   clearSession?: boolean
   clearUndo?: boolean
+  stopAutoStep?: boolean
 }
 
 function App() {
@@ -118,11 +119,11 @@ function App() {
   const canGenerateMines = layoutPhase !== null
 
   const resetTransientUiState = useCallback(
-    ({ cancelBackground = true, clearSession = true, clearUndo = true }: ResetOptions = {}) => {
+    ({ cancelBackground = true, clearSession = true, clearUndo = true, stopAutoStep = true }: ResetOptions = {}) => {
       if (cancelBackground) cancelBackgroundGeneration()
       if (clearSession) setMineGenerationSession(null)
       if (clearUndo) setUndoGame(null)
-      dispatchUi({ type: 'stop_mine_auto_step' })
+      if (stopAutoStep) dispatchUi({ type: 'stop_mine_auto_step' })
     },
     [cancelBackgroundGeneration],
   )
@@ -193,7 +194,7 @@ function App() {
       baseSeed !== null ? (baseSeed + stepOffset) >>> 0 : randomSeed(),
     )
 
-    resetTransientUiState({ cancelBackground: false, clearSession: false })
+    resetTransientUiState({ cancelBackground: false, clearSession: false, stopAutoStep: false })
     setMineGenerationSession(result.session)
     setGame(result.game)
     dispatchUi({ type: 'show_debug_mines' })

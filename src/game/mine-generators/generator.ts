@@ -1,7 +1,15 @@
-import { getNeighbors } from '../grid'
+import { getNeighbors, hashUnit } from '../grid'
+import { countMinesInCells, getAxisConstraintCells, getConstraintCellsForHintSpec, selectAxisPair } from '../hint-constraints'
 import { deterministicSolveFromStarts } from '../solver'
 import { createTruthBoard } from '../truth'
-import type { GenerationSettings, LayoutPhaseResult, MineGenerationSession } from '../types'
+import type {
+  AssignedHintSpec,
+  AxisPair,
+  GenerationSettings,
+  HintType,
+  LayoutPhaseResult,
+  MineGenerationSession,
+} from '../types'
 import type { MineGenerator } from './types'
 import {
   buildCandidateIndicesFromAssigned,
@@ -12,6 +20,87 @@ import {
   pickCandidates,
 } from './utilities'
 import { selectStartIndexRandom } from './shared'
+
+const AXIS_HINT_RATIO = 0.15
+
+function selectHintKind(seed: number, index: number, startIndex: number): HintType {
+  if (index === startIndex) return 'adjacent'
+  return hashUnit(seed ^ 0x6f42b513, index, 5, 101) < AXIS_HINT_RATIO ? 'axisPairLine' : 'adjacent'
+}
+
+function chooseAxisPairForTarget(
+  seed: number,
+  targetIndex: number,
+  phase: LayoutPhaseResult,
+  hintAssignments: Map<number, AssignedHintSpec>,
+): AxisPair | null {
+  const order: AxisPair[] = [0, 1, 2].sort((a, b) => {
+    const ah = hashUnit(seed ^ 0x2f6e2b1d, targetIndex, a, phase.activeIndices.length)
+    const bh = hashUnit(seed ^ 0x2f6e2b1d, targetIndex, b, phase.activeIndices.length)
+    if (ah !== bh) return ah - bh
+    return a - b
+  }) as AxisPair[]
+  const preferred = selectAxisPair(seed, targetIndex)
+  const preferredFirst = [preferred, ...order.filter((axis) => axis !== preferred)] as AxisPair[]
+
+  for (const candidateAxis of preferredFirst) {
+    const candidateLine = getAxisConstraintCells(
+      targetIndex,
+      candidateAxis,
+      phase.rows,
+      phase.cols,
+      phase.activeMask,
+    )
+    let conflict = false
+    for (const [assignedIndex, assignedSpec] of hintAssignments) {
+      if (assignedSpec.kind !== 'axisPairLine') continue
+      if ((assignedSpec.axisPair ?? 0) !== candidateAxis) continue
+      const assignedLine = getAxisConstraintCells(
+        assignedIndex,
+        assignedSpec.axisPair ?? 0,
+        phase.rows,
+        phase.cols,
+        phase.activeMask,
+      )
+      if (assignedLine.includes(targetIndex) || candidateLine.includes(assignedIndex)) {
+        conflict = true
+        break
+      }
+    }
+    if (!conflict) return candidateAxis
+  }
+  return null
+}
+
+function buildHintSpecForKind(
+  kind: HintType,
+  seed: number,
+  index: number,
+  value: number,
+  axisPair: AxisPair | null = null,
+): AssignedHintSpec {
+  if (kind === 'axisPairLine') {
+    return { kind, value, axisPair: axisPair ?? selectAxisPair(seed, index) }
+  }
+  return { kind, value }
+}
+
+function applyHintAssignmentsToTruth(
+  truth: ReturnType<typeof createTruthBoard>,
+  hintAssignments: Map<number, AssignedHintSpec>,
+): void {
+  for (const [index, spec] of hintAssignments) {
+    if (!truth[index]?.active || truth[index].mine) continue
+    truth[index].hintKind = spec.kind
+    truth[index].axisPair = spec.kind === 'axisPairLine' ? (spec.axisPair ?? 0) : null
+    if (spec.kind === 'axisPairLine') {
+      truth[index].hints.axisPairLine = spec.value
+    } else {
+      truth[index].adjacentMines = spec.value
+      truth[index].hints.adjacent = spec.value
+    }
+  }
+}
 
 /**
  * Creates the initial generation session for a layout.
@@ -29,8 +118,8 @@ export function initialize(
 ): MineGenerationSession {
   const startIndex = selectStartIndexRandom(phase, seed ^ 0x9e3779b9)
   const assignedSet = new Set<number>(startIndex >= 0 ? [startIndex] : [])
-  const hintAssignments = new Map<number, number>()
-  if (startIndex >= 0) hintAssignments.set(startIndex, 0)
+  const hintAssignments = new Map<number, AssignedHintSpec>()
+  if (startIndex >= 0) hintAssignments.set(startIndex, { kind: 'adjacent', value: 0 })
   const candidateIndices = buildCandidateIndicesFromAssigned(phase, assignedSet)
 
   return {
@@ -65,16 +154,12 @@ export function step(
 ): MineGenerationSession {
   const passesDeterministicSnapshot = (
     mineSet: Set<number>,
-    hintAssignments: Map<number, number>,
+    hintAssignments: Map<number, AssignedHintSpec>,
   ): boolean => {
-    if (settings.hintType !== 'adjacent' || session.startIndex < 0) return true
+    if (session.startIndex < 0) return true
 
     const truth = createTruthBoard(phase.rows, phase.cols, mineSet, phase.activeMask)
-    for (const [index, hintValue] of hintAssignments) {
-      if (!truth[index]?.active || truth[index].mine) continue
-      truth[index].adjacentMines = hintValue
-      truth[index].hints.adjacent = hintValue
-    }
+    applyHintAssignmentsToTruth(truth, hintAssignments)
 
     return deterministicSolveFromStarts(
       truth,
@@ -138,132 +223,164 @@ export function step(
 
   const attemptLines: string[] = [`  setup: candidates=[${candidates.join(', ')}], targetOrder=[${targetAttemptOrder.join(', ')}]`]
   let acceptedTargetIndex = -1
-  let acceptedHintValue = -1
+  let acceptedHintSpec: AssignedHintSpec | null = null
   let acceptedMineSet: Set<number> | null = null
   let acceptedHintAttemptOrder: number[] = []
-  let acceptedUnassignedTargetNeighbors: number[] = []
+  let acceptedUnassignedTargetScope: number[] = []
   let addedMinesForAcceptedAttempt: number[] = []
 
   for (const targetIndex of targetAttemptOrder) {
-    const targetNeighbors = getNeighbors(targetIndex, phase.rows, phase.cols).filter((index) => phase.activeMask[index])
-    const unassignedTargetNeighbors = targetNeighbors.filter((index) => !session.assignedSet.has(index))
-    const existingMinedNeighborCount = targetNeighbors.filter((index) => session.mineSet.has(index)).length
-    const eligibleMineNeighborCount = unassignedTargetNeighbors.filter(
-      (index) =>
-        !session.mineSet.has(index) &&
-        canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, session.mineSet),
-    ).length
-    const minHint = Math.min(6, Math.max(0, existingMinedNeighborCount))
-    const maxHint = Math.min(6, Math.max(0, existingMinedNeighborCount + eligibleMineNeighborCount))
-    const hintAttemptOrder = buildHintAttemptOrder(pickSeed ^ nextStepCount, targetIndex, minHint, maxHint)
-    attemptLines.push(
-      `  target ${targetIndex}: unassignedNeighbors=[${unassignedTargetNeighbors.join(', ')}], hintOrder=[${hintAttemptOrder.join(', ')}]`,
-    )
+    const preferredHintKind = selectHintKind(session.seed, targetIndex, session.startIndex)
+    const hintKindAttemptOrder: HintType[] =
+      preferredHintKind === 'axisPairLine' ? ['axisPairLine', 'adjacent'] : ['adjacent']
 
-    // Attempt each hint in deterministic order. Each attempt is isolated:
-    // failed attempts are rolled back by discarding the temporary mine set.
-    for (const hintValue of hintAttemptOrder) {
-      const attemptMineSet = new Set(session.mineSet)
-      const currentMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
-      if (currentMinedNeighborCount > hintValue) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (already has ${currentMinedNeighborCount} mined neighbors)`,
-        )
-        continue
+    for (const targetHintKind of hintKindAttemptOrder) {
+      let axisPairForAttempt: AxisPair | null = null
+      if (targetHintKind === 'axisPairLine') {
+        axisPairForAttempt = chooseAxisPairForTarget(session.seed, targetIndex, phase, session.hintAssignments)
+        if (axisPairForAttempt === null) {
+          attemptLines.push(`  target ${targetIndex} (axisPairLine): invalid (no non-overlapping axis available)`)
+          continue
+        }
       }
-
-      const minesNeeded = hintValue - currentMinedNeighborCount
-      const eligibleMineNeighbors = unassignedTargetNeighbors.filter(
+      const targetHintSpec = buildHintSpecForKind(
+        targetHintKind,
+        session.seed,
+        targetIndex,
+        0,
+        axisPairForAttempt,
+      )
+      const targetScope = getConstraintCellsForHintSpec(
+        targetIndex,
+        targetHintSpec,
+        phase.rows,
+        phase.cols,
+        phase.activeMask,
+      )
+      const unassignedTargetScope = targetScope.filter((index) => !session.assignedSet.has(index))
+      const existingMinedScopeCount = countMinesInCells(targetScope, session.mineSet)
+      const eligibleMineScopeCount = unassignedTargetScope.filter(
         (index) =>
-          !attemptMineSet.has(index) &&
-          canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, attemptMineSet),
-      )
-      if (eligibleMineNeighbors.length < minesNeeded) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (needs ${minesNeeded}, only ${eligibleMineNeighbors.length} eligible)`,
-        )
-        continue
-      }
-
-      const orderedMineCandidates = pickCandidates(
-        eligibleMineNeighbors,
-        pickSeed ^ targetIndex ^ hintValue,
-        eligibleMineNeighbors.length,
-        [],
-      )
-      const pickedMineNeighbors: number[] = []
-      for (const candidate of orderedMineCandidates) {
-        if (pickedMineNeighbors.length >= minesNeeded) break
-        if (!canAcceptMine(candidate, phase, session.assignedSet, session.hintAssignments, attemptMineSet)) continue
-        attemptMineSet.add(candidate)
-        pickedMineNeighbors.push(candidate)
-      }
-      if (pickedMineNeighbors.length < minesNeeded) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (picked ${pickedMineNeighbors.length}/${minesNeeded} mines)`,
-        )
-        continue
-      }
-
-      const finalMinedNeighborCount = targetNeighbors.filter((index) => attemptMineSet.has(index)).length
-      if (finalMinedNeighborCount !== hintValue) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (final mined neighbors ${finalMinedNeighborCount})`,
-        )
-        continue
-      }
-
-      const tentativeAssignedSet = new Set(session.assignedSet)
-      tentativeAssignedSet.add(targetIndex)
-      const tentativeHintAssignments = new Map(session.hintAssignments)
-      tentativeHintAssignments.set(targetIndex, hintValue)
-      const completesBoard = tentativeAssignedSet.size >= phase.activeIndices.length
-      if (
-        !completesBoard &&
-        !hasForcedNextMove(phase, tentativeAssignedSet, tentativeHintAssignments, attemptMineSet)
-      ) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (would leave no forced next move)`,
-        )
-        continue
-      }
-
-      if (!passesDeterministicSnapshot(attemptMineSet, tentativeHintAssignments)) {
-        attemptLines.push(
-          `    - hint ${hintValue}: invalid (deterministic solve would fail)`,
-        )
-        continue
-      }
-
+          !session.mineSet.has(index) &&
+          canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, session.mineSet),
+      ).length
+      const minHint = Math.max(0, existingMinedScopeCount)
+      const maxHint = Math.max(0, existingMinedScopeCount + eligibleMineScopeCount)
+      const hintAttemptOrder = buildHintAttemptOrder(pickSeed ^ nextStepCount, targetIndex, minHint, maxHint)
       attemptLines.push(
-        `    - hint ${hintValue}: valid (addedMines=[${pickedMineNeighbors.join(', ')}], minedNeighbors=${finalMinedNeighborCount})`,
+        `  target ${targetIndex} (${targetHintKind}): unassignedScope=[${unassignedTargetScope.join(', ')}], hintOrder=[${hintAttemptOrder.join(', ')}]`,
       )
 
-      acceptedTargetIndex = targetIndex
-      acceptedHintValue = hintValue
-      acceptedMineSet = attemptMineSet
-      acceptedHintAttemptOrder = hintAttemptOrder
-      acceptedUnassignedTargetNeighbors = unassignedTargetNeighbors
-      addedMinesForAcceptedAttempt = pickedMineNeighbors
-      break
+      // Attempt each hint in deterministic order. Each attempt is isolated:
+      // failed attempts are rolled back by discarding the temporary mine set.
+      for (const hintValue of hintAttemptOrder) {
+        const attemptMineSet = new Set(session.mineSet)
+        const currentMinedScopeCount = countMinesInCells(targetScope, attemptMineSet)
+        if (currentMinedScopeCount > hintValue) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (already has ${currentMinedScopeCount} mined in scope)`,
+          )
+          continue
+        }
+
+        const minesNeeded = hintValue - currentMinedScopeCount
+        const eligibleMineScope = unassignedTargetScope.filter(
+          (index) =>
+            !attemptMineSet.has(index) &&
+            canAcceptMine(index, phase, session.assignedSet, session.hintAssignments, attemptMineSet),
+        )
+        if (eligibleMineScope.length < minesNeeded) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (needs ${minesNeeded}, only ${eligibleMineScope.length} eligible)`,
+          )
+          continue
+        }
+
+        const orderedMineCandidates = pickCandidates(
+          eligibleMineScope,
+          pickSeed ^ targetIndex ^ hintValue,
+          eligibleMineScope.length,
+          [],
+        )
+        const pickedMineNeighbors: number[] = []
+        for (const candidate of orderedMineCandidates) {
+          if (pickedMineNeighbors.length >= minesNeeded) break
+          if (!canAcceptMine(candidate, phase, session.assignedSet, session.hintAssignments, attemptMineSet)) continue
+          attemptMineSet.add(candidate)
+          pickedMineNeighbors.push(candidate)
+        }
+        if (pickedMineNeighbors.length < minesNeeded) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (picked ${pickedMineNeighbors.length}/${minesNeeded} mines)`,
+          )
+          continue
+        }
+
+        const finalMinedScopeCount = countMinesInCells(targetScope, attemptMineSet)
+        if (finalMinedScopeCount !== hintValue) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (final mined in scope ${finalMinedScopeCount})`,
+          )
+          continue
+        }
+
+        const tentativeAssignedSet = new Set(session.assignedSet)
+        tentativeAssignedSet.add(targetIndex)
+        const tentativeHintAssignments = new Map(session.hintAssignments)
+        tentativeHintAssignments.set(
+          targetIndex,
+          buildHintSpecForKind(targetHintKind, session.seed, targetIndex, hintValue, axisPairForAttempt),
+        )
+        const completesBoard = tentativeAssignedSet.size >= phase.activeIndices.length
+        if (
+          !completesBoard &&
+          !hasForcedNextMove(phase, tentativeAssignedSet, tentativeHintAssignments, attemptMineSet)
+        ) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (would leave no forced next move)`,
+          )
+          continue
+        }
+
+        if (!passesDeterministicSnapshot(attemptMineSet, tentativeHintAssignments)) {
+          attemptLines.push(
+            `    - hint ${hintValue}: invalid (deterministic solve would fail)`,
+          )
+          continue
+        }
+
+        attemptLines.push(
+          `    - hint ${hintValue}: valid (addedMines=[${pickedMineNeighbors.join(', ')}], minedInScope=${finalMinedScopeCount})`,
+        )
+
+        acceptedTargetIndex = targetIndex
+        acceptedHintSpec = buildHintSpecForKind(targetHintKind, session.seed, targetIndex, hintValue, axisPairForAttempt)
+        acceptedMineSet = attemptMineSet
+        acceptedHintAttemptOrder = hintAttemptOrder
+        acceptedUnassignedTargetScope = unassignedTargetScope
+        addedMinesForAcceptedAttempt = pickedMineNeighbors
+        break
+      }
+
+      if (acceptedMineSet !== null) break
     }
 
     if (acceptedMineSet !== null) break
   }
 
   // 5) Apply only a valid attempt; otherwise keep mine/hint state unchanged.
-  if (acceptedTargetIndex >= 0 && acceptedHintValue >= 0 && acceptedMineSet !== null) {
+  if (acceptedTargetIndex >= 0 && acceptedHintSpec !== null && acceptedMineSet !== null) {
     const assignedSet = new Set(session.assignedSet)
     assignedSet.add(acceptedTargetIndex)
     const autoAssignedMines = assignResolvedNeighborMines(assignedSet, acceptedMineSet)
     const candidateIndices = buildCandidateIndicesFromAssigned(phase, assignedSet)
     const hintAssignments = new Map(session.hintAssignments)
-    hintAssignments.set(acceptedTargetIndex, acceptedHintValue)
+    hintAssignments.set(acceptedTargetIndex, acceptedHintSpec)
     const message = [
       `step ${nextStepCount}: target ${acceptedTargetIndex}`,
-      `  accepted: unassignedNeighbors=[${acceptedUnassignedTargetNeighbors.join(', ')}], hintOrder=[${acceptedHintAttemptOrder.join(', ')}]`,
+      `  accepted: unassignedScope=[${acceptedUnassignedTargetScope.join(', ')}], hintOrder=[${acceptedHintAttemptOrder.join(', ')}]`,
       ...attemptLines,
-      `  result: valid=true, acceptedHint=${acceptedHintValue}, addedMines=[${addedMinesForAcceptedAttempt.join(', ')}], autoAssigned=[${autoAssignedMines.join(', ')}]`,
+      `  result: valid=true, acceptedHint=${acceptedHintSpec.value} (${acceptedHintSpec.kind}), addedMines=[${addedMinesForAcceptedAttempt.join(', ')}], autoAssigned=[${autoAssignedMines.join(', ')}]`,
     ].join('\n')
     return {
       ...session,
@@ -275,7 +392,7 @@ export function step(
       messages: [...session.messages, message],
       stepCount: nextStepCount,
       done: assignedSet.size >= phase.activeIndices.length,
-      lastAction: `tx step ${nextStepCount}: target ${acceptedTargetIndex} accepted hint ${acceptedHintValue}`,
+      lastAction: `tx step ${nextStepCount}: target ${acceptedTargetIndex} accepted hint ${acceptedHintSpec.value} (${acceptedHintSpec.kind})`,
     }
   }
 

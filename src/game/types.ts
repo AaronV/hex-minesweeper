@@ -1,12 +1,21 @@
 export type GameStatus = 'playing' | 'won' | 'lost'
 export type MapLayout = 'rectangle' | 'rorschach' | 'snowflake'
 export type HintType = 'adjacent' | 'axisPairLine'
+export type AxisPair = 0 | 1 | 2
+
+export interface AssignedHintSpec {
+  kind: HintType
+  value: number
+  axisPair?: AxisPair
+}
 
 export interface CellTruth {
   active: boolean
   mine: boolean
   adjacentMines: number
   hints: Record<HintType, number>
+  hintKind: HintType
+  axisPair: AxisPair | null
 }
 
 export interface CellState extends CellTruth {
@@ -67,7 +76,7 @@ export interface MineGenerationSession {
   lastAction: string
   done: boolean
   assignedSet: Set<number>
-  hintAssignments: Map<number, number>
+  hintAssignments: Map<number, AssignedHintSpec>
   candidateIndices: number[]
   currentTargetIndex: number
 }

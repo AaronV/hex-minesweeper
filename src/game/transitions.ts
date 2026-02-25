@@ -1,4 +1,4 @@
-import { getNeighbors } from './grid'
+import { getConstraintCellsForHintCell } from './hint-constraints'
 import { canAutoChord, getCellHintValue } from './hint-types'
 import { checkWin, revealCellRegion } from './truth'
 import type { GameState, GameStatus } from './types'
@@ -43,15 +43,14 @@ export function chordReveal(previous: GameState, index: number): GameState {
     return previous
   }
 
-  const neighbors = getNeighbors(index, previous.rows, previous.cols).filter(
-    (neighbor) => previous.cells[neighbor].active,
-  )
-  const flaggedCount = neighbors.filter((neighbor) => previous.cells[neighbor].flagged).length
+  const activeMask = previous.cells.map((cell) => cell.active)
+  const scopeCells = getConstraintCellsForHintCell(index, target, previous.rows, previous.cols, activeMask)
+  const flaggedCount = scopeCells.filter((neighbor) => previous.cells[neighbor].flagged).length
   if (flaggedCount !== getCellHintValue(target, previous.hintType)) return previous
 
   const cells = previous.cells.map((cell) => ({ ...cell }))
 
-  for (const neighbor of neighbors) {
+  for (const neighbor of scopeCells) {
     const cell = cells[neighbor]
     if (cell.revealed || cell.flagged) continue
 
