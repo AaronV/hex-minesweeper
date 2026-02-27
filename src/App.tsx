@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, QuickButtonPanel } from './components/ControlPanel'
+import { TutorialModal } from './components/TutorialModal'
 import type { WorkflowStage } from './app/types'
 import { buildRevealAnimation, type RevealAnimationState } from './app/reveal-animation'
 import {
@@ -114,6 +115,7 @@ function App() {
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [isControlPanelOpen, setControlPanelOpen] = useState(false)
   const [revealAnimation, setRevealAnimation] = useState<RevealAnimationState | null>(null)
+  const [isTutorialOpen, setTutorialOpen] = useState(true)
   const {
     progress: generationProgress,
     start: startBackgroundGeneration,
@@ -333,14 +335,16 @@ function App() {
 
   return (
     <>
-      <QuickButtonPanel
-        game={game}
-        canUndo={undoGame !== null}
-        stage={uiState.stage}
-        onUndo={onUndo}
-        onNewGame={onGenerateBoardQuick}
-        onOpenSettings={() => setControlPanelOpen(true)}
-      />
+      {!isTutorialOpen ? (
+        <QuickButtonPanel
+          game={game}
+          canUndo={undoGame !== null}
+          stage={uiState.stage}
+          onUndo={onUndo}
+          onNewGame={onGenerateBoardQuick}
+          onOpenSettings={() => setControlPanelOpen(true)}
+        />
+      ) : null}
       <ControlPanel
         isOpen={isControlPanelOpen}
         settings={settings}
@@ -380,6 +384,7 @@ function App() {
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
+      <TutorialModal isOpen={isTutorialOpen} onClose={() => setTutorialOpen(false)} />
       {progressVisible ? (
         <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center">
           <div className="w-[min(92vw,460px)] rounded-xl border border-slate-300 bg-white/95 px-5 py-4 text-slate-800 shadow-2xl backdrop-blur-sm">
