@@ -50,10 +50,10 @@ export interface GameState {
 }
 
 export const DEFAULT_SETTINGS: GenerationSettings = {
-  mapSize: 14,
+  mapSize: 8,
   mapLayout: 'rorschach',
   hintType: 'adjacent',
-  propagation: 62,
+  propagation: 20,
   snowflakeArms: 6,
   rectCols: 20,
   rectRows: 14,

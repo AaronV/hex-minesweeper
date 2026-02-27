@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
-import { ControlPanel } from './components/ControlPanel'
+import { ControlPanel, QuickButtonPanel } from './components/ControlPanel'
 import type { WorkflowStage } from './app/types'
 import {
   advanceMineGeneration,
@@ -111,6 +111,7 @@ function App() {
   const [mineGenerationSession, setMineGenerationSession] = useState<MineGenerationSession | null>(null)
   const [game, setGame] = useState<GameState | null>(initialState.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
+  const [isControlPanelOpen, setControlPanelOpen] = useState(false)
   const {
     progress: generationProgress,
     start: startBackgroundGeneration,
@@ -148,22 +149,9 @@ function App() {
   const onSettingsChange = useCallback(
     (partial: Partial<GenerationSettings>) => {
       const next = normalizeSettings({ ...settings, ...partial })
-      const seed = parseSeed(seedText) ?? randomSeed()
       setSettings(next)
-
-      if (uiState.debugToolsEnabled) {
-        resetTransientUiState()
-        const { phase, game: layoutGame } = generateLayoutOnly(next, seed)
-        setLayoutSeed(seed)
-        setLayoutPhase(phase)
-        setGame(layoutGame)
-        dispatchUi({ type: 'show_debug_layout' })
-        return
-      }
-
-      startNonDebugGeneration(next, seed)
     },
-    [resetTransientUiState, seedText, settings, startNonDebugGeneration, uiState.debugToolsEnabled],
+    [settings],
   )
 
   const onGenerateLayout = useCallback(() => {
@@ -183,6 +171,12 @@ function App() {
     setSeedText(String(nextSeed))
     startNonDebugGeneration(settings, nextSeed)
   }, [settings, startNonDebugGeneration])
+
+  const onGenerateBoardFromSettings = useCallback(() => {
+    const seed = parseSeed(seedText) ?? randomSeed()
+    setSeedText(String(seed))
+    startNonDebugGeneration(settings, seed)
+  }, [seedText, settings, startNonDebugGeneration])
 
   const onGenerateMines = useCallback(() => {
     if (!layoutPhase) return
@@ -290,19 +284,30 @@ function App() {
 
   return (
     <>
+      <QuickButtonPanel
+        game={game}
+        canUndo={undoGame !== null}
+        stage={uiState.stage}
+        onUndo={onUndo}
+        onNewGame={onGenerateBoardQuick}
+        onOpenSettings={() => setControlPanelOpen(true)}
+      />
       <ControlPanel
+        isOpen={isControlPanelOpen}
         settings={settings}
         seedText={seedText}
         game={game}
         stage={uiState.stage}
         debugToolsEnabled={uiState.debugToolsEnabled}
         xrayMode={effectiveXrayMode}
-        canUndo={undoGame !== null}
         canGenerateMines={canGenerateMines}
         canStartPlaying={canStartPlaying}
         isMineAutoStepping={uiState.isMineAutoStepping}
         mineStepCount={mineGenerationSession?.stepCount ?? 0}
-        onGenerateBoardQuick={onGenerateBoardQuick}
+        onGenerateBoardQuick={() => {
+          onGenerateBoardFromSettings()
+          setControlPanelOpen(false)
+        }}
         onGenerateLayout={onGenerateLayout}
         onGenerateMines={onGenerateMines}
         onStartPlaying={onStartPlaying}
@@ -313,7 +318,7 @@ function App() {
           dispatchUi({ type: 'set_debug_tools', enabled, fallbackStage })
         }}
         onToggleMineAutoStep={onToggleMineAutoStep}
-        onUndo={onUndo}
+        onClose={() => setControlPanelOpen(false)}
         onToggleXrayMode={(enabled) => dispatchUi({ type: 'set_xray_mode', enabled })}
         onSeedTextChange={setSeedText}
         onSettingsChange={onSettingsChange}

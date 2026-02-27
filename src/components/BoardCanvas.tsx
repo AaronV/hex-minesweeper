@@ -4,9 +4,6 @@ import type { GameState } from '../game'
 import { computeLayout } from '../board/layout'
 
 const INITIAL_ZOOM = 0.9
-const CONTROL_PANEL_LEFT = 12
-const CONTROL_PANEL_WIDTH = 320
-const CONTROL_PANEL_GUTTER = 12
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -14,8 +11,7 @@ function clamp(value: number, min: number, max: number): number {
 
 function computeCenteredCamera(game: GameState | null, canvas: HTMLCanvasElement): CameraState {
   const rect = canvas.getBoundingClientRect()
-  const blockedLeft = CONTROL_PANEL_LEFT + CONTROL_PANEL_WIDTH + CONTROL_PANEL_GUTTER
-  const targetCenterX = (blockedLeft + rect.width) / 2
+  const targetCenterX = rect.width / 2
   const targetCenterY = rect.height / 2
 
   if (!game) {
@@ -51,7 +47,7 @@ function computeCenteredCamera(game: GameState | null, canvas: HTMLCanvasElement
   const activeCenterY = (minY + maxY) / 2
   const activeWidth = Math.max(layout.radius * Math.sqrt(3), maxX - minX + layout.radius * Math.sqrt(3))
   const activeHeight = Math.max(layout.radius * 2, maxY - minY + layout.radius * 2)
-  const availableWidth = Math.max(180, rect.width - blockedLeft - 20)
+  const availableWidth = Math.max(180, rect.width - 24)
   const availableHeight = Math.max(180, rect.height - 24)
   const fitZoom = Math.min(availableWidth / activeWidth, availableHeight / activeHeight)
   const zoom = clamp(fitZoom * 0.95, 0.45, 3)
@@ -112,6 +108,16 @@ export function BoardCanvas({ game, xrayMode, interactive, recenterToken = 0, on
     return () => {
       window.removeEventListener('resize', draw)
     }
+  }, [draw])
+
+  useEffect(() => {
+    let rafId = 0
+    const animate = () => {
+      draw()
+      rafId = window.requestAnimationFrame(animate)
+    }
+    rafId = window.requestAnimationFrame(animate)
+    return () => window.cancelAnimationFrame(rafId)
   }, [draw])
 
   useEffect(() => {

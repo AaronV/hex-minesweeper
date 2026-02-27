@@ -126,11 +126,14 @@ export function drawGameBoard(
 
   const layout = computeLayout(width, height, game.rows, game.cols)
   const unsolvedCellTint = getUnsolvedCellTint(game.generationReport.layoutSeed)
+  const pulsePhase = (Math.sin((performance.now() / 1000) * ((Math.PI * 2) / 2.8)) + 1) / 2
   let hoveredHintTargets: Set<number> | null = null
+  let hoveredHintCellIndex: number | null = null
 
   if (hoveredHintIndex !== null && hoveredHintIndex >= 0 && hoveredHintIndex < game.cells.length) {
     const hoverHintIsVisible = shouldShowHint({ game, index: hoveredHintIndex, xrayMode }, game.hintType)
     if (hoverHintIsVisible) {
+      hoveredHintCellIndex = hoveredHintIndex
       const targetIndices = getHintTargetCells(game, hoveredHintIndex)
       if (targetIndices.length > 0) hoveredHintTargets = new Set(targetIndices)
     }
@@ -146,7 +149,7 @@ export function drawGameBoard(
       (xrayMode && cell.mine) || (game.status === 'lost' && cell.mine) || ((cell.revealed || previewOpen) && cell.mine)
     const hidden = !(cell.revealed || previewOpen)
     const hintValue = getCellHintValue(cell, game.hintType)
-    const hoverHighlighted = hoveredHintTargets?.has(index) ?? false
+    const hoverHighlighted = (hoveredHintTargets?.has(index) ?? false) || hoveredHintCellIndex === index
 
     let fill = 'rgba(226, 232, 240, 0.98)'
 
@@ -155,10 +158,20 @@ export function drawGameBoard(
     } else if (cell.mine) {
       fill = cell.exploded ? 'rgba(254, 202, 202, 0.98)' : 'rgba(254, 226, 226, 0.96)'
     }
+
     const position = toScreen(center.x, center.y, width, height, camera)
     const drawRadius = layout.radius * camera.zoom - 0.8
     if (drawRadius < 4) continue
     drawHex(ctx, position.x, position.y, drawRadius, fill)
+    if (hoverHighlighted) {
+      drawHex(
+        ctx,
+        position.x,
+        position.y,
+        drawRadius,
+        `rgba(15, 23, 42, ${hidden ? 0.075 : 0.065})`,
+      )
+    }
 
     const showHint = shouldShowHint({ game, index, xrayMode }, game.hintType)
 
@@ -189,25 +202,17 @@ export function drawGameBoard(
       )
     }
 
-    if (hoverHighlighted) {
-      strokeHex(
-        ctx,
-        position.x,
-        position.y,
-        Math.max(3, drawRadius - 0.7),
-        'rgba(148, 163, 184, 0.58)',
-        Math.max(1, drawRadius * 0.045),
-      )
-    }
-
     if (cell.start && (hidden || generationPreviewMode) && !cell.flagged) {
+      const pulseInset = Math.max(1.8, drawRadius * (0.16 + pulsePhase * 0.06))
+      const pulseAlpha = 0.68 + pulsePhase * 0.3
+      const pulseWidth = Math.max(1.4, drawRadius * (0.07 + pulsePhase * 0.035))
       strokeHex(
         ctx,
         position.x,
         position.y,
-        Math.max(3, drawRadius - Math.max(1.8, drawRadius * 0.18)),
-        'rgba(22, 163, 74, 0.98)',
-        Math.max(1.4, drawRadius * 0.08),
+        Math.max(3, drawRadius - pulseInset),
+        `rgba(22, 163, 74, ${pulseAlpha.toFixed(3)})`,
+        pulseWidth,
       )
     }
 
