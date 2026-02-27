@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, QuickButtonPanel } from './components/ControlPanel'
 import type { WorkflowStage } from './app/types'
+import { buildRevealAnimation, type RevealAnimationState } from './app/reveal-animation'
 import {
   advanceMineGeneration,
   applyRightClick,
@@ -112,6 +113,7 @@ function App() {
   const [game, setGame] = useState<GameState | null>(initialState.game)
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [isControlPanelOpen, setControlPanelOpen] = useState(false)
+  const [revealAnimation, setRevealAnimation] = useState<RevealAnimationState | null>(null)
   const {
     progress: generationProgress,
     start: startBackgroundGeneration,
@@ -119,12 +121,14 @@ function App() {
   } = useBackgroundGeneration()
 
   const canGenerateMines = layoutPhase !== null
+  const isRevealAnimating = revealAnimation !== null
 
   const resetTransientUiState = useCallback(
     ({ cancelBackground = true, clearSession = true, clearUndo = true, stopAutoStep = true }: ResetOptions = {}) => {
       if (cancelBackground) cancelBackgroundGeneration()
       if (clearSession) setMineGenerationSession(null)
       if (clearUndo) setUndoGame(null)
+      setRevealAnimation(null)
       if (stopAutoStep) dispatchUi({ type: 'stop_mine_auto_step' })
     },
     [cancelBackgroundGeneration],
@@ -229,39 +233,84 @@ function App() {
     return () => window.clearInterval(id)
   }, [canGenerateMines, mineGenerationSession?.done, onGenerateMines, uiState.isMineAutoStepping, uiState.stage])
 
-  const applyMove = useCallback((move: (previous: GameState) => GameState) => {
+  const applyMove = useCallback((move: (previous: GameState) => GameState, animateRevealFromIndex?: number) => {
+    if (isRevealAnimating) return
     setGame((previous) => {
       if (!previous) return previous
       const next = move(previous)
-      if (next !== previous) setUndoGame(previous)
+      if (next === previous) return previous
+      setUndoGame(previous)
+
+      if (animateRevealFromIndex !== undefined) {
+        const animation = buildRevealAnimation(previous, next, animateRevealFromIndex)
+        if (animation) {
+          setRevealAnimation(animation.animation)
+          return animation.initial
+        }
+      }
+
       return next
     })
-  }, [])
+  }, [isRevealAnimating])
+
+  useEffect(() => {
+    if (!revealAnimation) return
+
+    if (revealAnimation.remaining.length === 0) {
+      if (revealAnimation.finalStatus !== 'playing') {
+        setGame((previous) => (previous ? { ...previous, status: revealAnimation.finalStatus } : previous))
+      }
+      setRevealAnimation(null)
+      return
+    }
+
+    const id = window.setTimeout(() => {
+      setGame((previous) => {
+        if (!previous) return previous
+        const [nextReveal] = revealAnimation.remaining
+        const cells = previous.cells.map((cell, index) => (index === nextReveal ? { ...cell, revealed: true } : cell))
+        return { ...previous, cells }
+      })
+      setRevealAnimation((previous) =>
+        previous
+          ? {
+              finalStatus: previous.finalStatus,
+              remaining: previous.remaining.slice(1),
+            }
+          : previous,
+      )
+    }, 24)
+
+    return () => window.clearTimeout(id)
+  }, [revealAnimation])
 
   const onReveal = useCallback(
     (index: number) => {
+      if (isRevealAnimating) return
       if (uiState.stage !== 'play') return
-      applyMove((previous) => revealCell(previous, index))
+      applyMove((previous) => revealCell(previous, index), index)
     },
-    [applyMove, uiState.stage],
+    [applyMove, isRevealAnimating, uiState.stage],
   )
 
   const onRightClick = useCallback(
     (index: number) => {
+      if (isRevealAnimating) return
       if (uiState.stage !== 'play') return
-      applyMove((previous) => applyRightClick(previous, index))
+      applyMove((previous) => applyRightClick(previous, index), index)
     },
-    [applyMove, uiState.stage],
+    [applyMove, isRevealAnimating, uiState.stage],
   )
 
   const onUndo = useCallback(() => {
+    if (isRevealAnimating) return
     if (uiState.stage !== 'play') return
     setUndoGame((previousUndo) => {
       if (!previousUndo) return previousUndo
       setGame(previousUndo)
       return null
     })
-  }, [uiState.stage])
+  }, [isRevealAnimating, uiState.stage])
 
   const generationComplete =
     uiState.stage === 'mines' &&
