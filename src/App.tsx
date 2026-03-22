@@ -43,6 +43,8 @@ const INITIAL_UI_STATE: UiState = {
   isMineAutoStepping: false,
 }
 
+const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
+
 function uiReducer(state: UiState, action: UiAction): UiState {
   switch (action.type) {
     case 'start_background_generation':
@@ -88,8 +90,20 @@ interface InitialAppState {
   game: GameState | null
 }
 
+function loadStoredSettings(): GenerationSettings {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return DEFAULT_SETTINGS
+    const parsed = JSON.parse(raw) as Partial<GenerationSettings>
+    return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed })
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
 function createInitialAppState(): InitialAppState {
-  const settings: GenerationSettings = DEFAULT_SETTINGS
+  const settings = loadStoredSettings()
   const layoutSeed = randomSeed()
   const seedText = String(layoutSeed)
   return { settings, seedText, layoutSeed, layoutPhase: null, game: null }
@@ -212,6 +226,14 @@ function App() {
     if (!canGenerateMines) return
     dispatchUi({ type: 'toggle_mine_auto_step' })
   }, [canGenerateMines])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    } catch {
+      // Ignore persistence failures so gameplay still works in restricted environments.
+    }
+  }, [settings])
 
   useEffect(() => {
     if (uiState.debugToolsEnabled) return
