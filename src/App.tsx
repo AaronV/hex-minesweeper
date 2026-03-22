@@ -283,29 +283,23 @@ function App() {
   useEffect(() => {
     if (!revealAnimation) return
 
-    if (revealAnimation.remaining.length === 0) {
-      if (revealAnimation.finalStatus !== 'playing') {
-        setGame((previous) => (previous ? { ...previous, status: revealAnimation.finalStatus } : previous))
-      }
-      setRevealAnimation(null)
-      return
-    }
-
     const id = window.setTimeout(() => {
+      const [nextReveal, ...remaining] = revealAnimation.remaining
+      if (nextReveal === undefined) {
+        setRevealAnimation(null)
+        return
+      }
+
       setGame((previous) => {
         if (!previous) return previous
-        const [nextReveal] = revealAnimation.remaining
         const cells = previous.cells.map((cell, index) => (index === nextReveal ? { ...cell, revealed: true } : cell))
-        return { ...previous, cells }
+        return {
+          ...previous,
+          cells,
+          status: remaining.length === 0 ? revealAnimation.finalStatus : previous.status,
+        }
       })
-      setRevealAnimation((previous) =>
-        previous
-          ? {
-              finalStatus: previous.finalStatus,
-              remaining: previous.remaining.slice(1),
-            }
-          : previous,
-      )
+      setRevealAnimation(remaining.length === 0 ? null : { finalStatus: revealAnimation.finalStatus, remaining })
     }, 24)
 
     return () => window.clearTimeout(id)
