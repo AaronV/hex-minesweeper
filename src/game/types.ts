@@ -49,16 +49,6 @@ export interface GameState {
   generationReport: GenerationReport
 }
 
-export const DEFAULT_SETTINGS: GenerationSettings = {
-  mapSize: 8,
-  mapLayout: 'rorschach',
-  hintType: 'adjacent',
-  propagation: 20,
-  snowflakeArms: 6,
-  rectCols: 20,
-  rectRows: 14,
-}
-
 export interface LayoutPhaseResult {
   rows: number
   cols: number

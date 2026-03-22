@@ -1,7 +1,16 @@
 import { clamp } from './grid'
 import type { GenerationSettings, MapLayout } from './types'
-
-export const DEFAULT_MINE_PERCENT = 20
+import {
+  DEFAULT_MINE_PERCENT,
+  MAP_SIZE_MAX,
+  MAP_SIZE_MIN,
+  PROPAGATION_MAX,
+  PROPAGATION_MIN,
+  RECT_COLS_MAX,
+  RECT_COLS_MIN,
+  RECT_ROWS_MAX,
+  RECT_ROWS_MIN,
+} from './constants'
 
 export function getGridDimensions(settings: GenerationSettings): { cols: number; rows: number } {
   if (settings.mapLayout === 'rectangle') {
@@ -40,17 +49,17 @@ export function estimatePlayableCells(settings: GenerationSettings): number {
 }
 
 export function normalizeSettings(settings: GenerationSettings): GenerationSettings {
-  const mapSize = clamp(Math.round(settings.mapSize), 8, 24)
+  const mapSize = clamp(Math.round(settings.mapSize), MAP_SIZE_MIN, MAP_SIZE_MAX)
   // Temporarily disable buggy layout generator until fixed.
   const mapLayout: MapLayout =
     settings.mapLayout === 'hexesOfHexes'
       ? 'rorschach'
       : (settings.mapLayout ?? 'rorschach')
   const hintType = settings.hintType === 'axisPairLine' ? 'axisPairLine' : 'adjacent'
-  const propagation = clamp(Math.round(settings.propagation), 20, 95)
+  const propagation = clamp(Math.round(settings.propagation), PROPAGATION_MIN, PROPAGATION_MAX)
   const snowflakeArms = settings.snowflakeArms <= 3 ? 3 : 6
-  const rectCols = clamp(Math.round(settings.rectCols), 8, 40)
-  const rectRows = clamp(Math.round(settings.rectRows), 8, 32)
+  const rectCols = clamp(Math.round(settings.rectCols), RECT_COLS_MIN, RECT_COLS_MAX)
+  const rectRows = clamp(Math.round(settings.rectRows), RECT_ROWS_MIN, RECT_ROWS_MAX)
   return { mapSize, mapLayout, hintType, propagation, snowflakeArms, rectCols, rectRows }
 }
 

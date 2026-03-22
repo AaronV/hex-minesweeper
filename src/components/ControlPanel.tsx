@@ -1,6 +1,16 @@
 import type { GameState, GenerationSettings, MapLayout } from '../game'
 import { DebugTools } from './DebugTools'
 import type { WorkflowStage } from '../app/types'
+import {
+  MAP_SIZE_MAX,
+  MAP_SIZE_MIN,
+  PROPAGATION_MAX,
+  PROPAGATION_MIN,
+  RECT_COLS_MAX,
+  RECT_COLS_MIN,
+  RECT_ROWS_MAX,
+  RECT_ROWS_MIN,
+} from '../game'
 
 interface ControlPanelProps {
   isOpen: boolean
@@ -74,8 +84,8 @@ function LayoutSection({ settings, seedText, onSeedTextChange, onSettingsChange 
             </div>
             <input
               type="range"
-              min={8}
-              max={40}
+              min={RECT_COLS_MIN}
+              max={RECT_COLS_MAX}
               value={settings.rectCols}
               onChange={(event) => onSettingsChange({ rectCols: Number(event.target.value) })}
               className="w-full"
@@ -89,8 +99,8 @@ function LayoutSection({ settings, seedText, onSeedTextChange, onSettingsChange 
             </div>
             <input
               type="range"
-              min={8}
-              max={32}
+              min={RECT_ROWS_MIN}
+              max={RECT_ROWS_MAX}
               value={settings.rectRows}
               onChange={(event) => onSettingsChange({ rectRows: Number(event.target.value) })}
               className="w-full"
@@ -106,8 +116,8 @@ function LayoutSection({ settings, seedText, onSeedTextChange, onSettingsChange 
             </div>
             <input
               type="range"
-              min={8}
-              max={24}
+              min={MAP_SIZE_MIN}
+              max={MAP_SIZE_MAX}
               value={settings.mapSize}
               onChange={(event) => onSettingsChange({ mapSize: Number(event.target.value) })}
               className="w-full"
@@ -121,8 +131,8 @@ function LayoutSection({ settings, seedText, onSeedTextChange, onSettingsChange 
             </div>
             <input
               type="range"
-              min={20}
-              max={95}
+              min={PROPAGATION_MIN}
+              max={PROPAGATION_MAX}
               value={settings.propagation}
               onChange={(event) => onSettingsChange({ propagation: Number(event.target.value) })}
               className="w-full"

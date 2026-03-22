@@ -10,6 +10,7 @@ import { deterministicSolveFromStarts } from './solver'
 import { createTruthBoard } from './truth'
 import { applyRightClick, chordReveal, revealCell, toggleFlag } from './transitions'
 import { checkWin } from './truth'
+import { DEFAULT_SETTINGS } from './constants'
 import type {
   AssignedHintSpec,
   CellState,
@@ -20,7 +21,6 @@ import type {
   LayoutPhaseResult,
   MineGenerationSession,
 } from './types'
-import { DEFAULT_SETTINGS } from './types'
 
 export type {
   CellState,
@@ -35,6 +35,17 @@ export type {
 } from './types'
 
 export { DEFAULT_SETTINGS, randomSeed, normalizeSettings, estimatePlayableCells, getMineTargetFromActiveCells }
+export {
+  DEFAULT_MINE_PERCENT,
+  MAP_SIZE_MAX,
+  MAP_SIZE_MIN,
+  PROPAGATION_MAX,
+  PROPAGATION_MIN,
+  RECT_COLS_MAX,
+  RECT_COLS_MIN,
+  RECT_ROWS_MAX,
+  RECT_ROWS_MIN,
+} from './constants'
 export { revealCell, toggleFlag, chordReveal, applyRightClick, checkWin }
 export { getNeighbors } from './grid'
 
