@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useState } from 'react'
 import { BoardCanvas } from './components/BoardCanvas'
 import { ControlPanel, QuickButtonPanel } from './components/ControlPanel'
 import { TutorialModal } from './components/TutorialModal'
+import { getStoredValue, setStoredValue } from './app/storage'
 import type { WorkflowStage } from './app/types'
 import { buildRevealAnimation, type RevealAnimationState } from './app/reveal-animation'
 import {
@@ -91,15 +92,11 @@ interface InitialAppState {
 }
 
 function loadStoredSettings(): GenerationSettings {
-  if (typeof window === 'undefined') return DEFAULT_SETTINGS
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (!raw) return DEFAULT_SETTINGS
-    const parsed = JSON.parse(raw) as Partial<GenerationSettings>
-    return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed })
-  } catch {
-    return DEFAULT_SETTINGS
-  }
+  return getStoredValue<Partial<GenerationSettings>, GenerationSettings>(
+    SETTINGS_STORAGE_KEY,
+    DEFAULT_SETTINGS,
+    (storedSettings) => normalizeSettings({ ...DEFAULT_SETTINGS, ...storedSettings }),
+  )
 }
 
 function createInitialAppState(): InitialAppState {
@@ -228,11 +225,7 @@ function App() {
   }, [canGenerateMines])
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
-    } catch {
-      // Ignore persistence failures so gameplay still works in restricted environments.
-    }
+    setStoredValue(SETTINGS_STORAGE_KEY, settings)
   }, [settings])
 
   useEffect(() => {
