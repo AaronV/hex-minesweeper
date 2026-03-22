@@ -45,6 +45,7 @@ const INITIAL_UI_STATE: UiState = {
 }
 
 const SETTINGS_STORAGE_KEY = 'hex-minesweeper:settings'
+const HAS_SEEN_TUTORIAL_STORAGE_KEY = 'hex-minesweeper:has-seen-tutorial'
 
 function uiReducer(state: UiState, action: UiAction): UiState {
   switch (action.type) {
@@ -106,6 +107,10 @@ function createInitialAppState(): InitialAppState {
   return { settings, seedText, layoutSeed, layoutPhase: null, game: null }
 }
 
+function loadHasSeenTutorial(): boolean {
+  return getStoredValue<boolean>(HAS_SEEN_TUTORIAL_STORAGE_KEY, false)
+}
+
 interface ResetOptions {
   cancelBackground?: boolean
   clearSession?: boolean
@@ -115,6 +120,7 @@ interface ResetOptions {
 
 function App() {
   const [initialState] = useState<InitialAppState>(() => createInitialAppState())
+  const [hasSeenTutorial, setHasSeenTutorial] = useState(() => loadHasSeenTutorial())
   const [uiState, dispatchUi] = useReducer(uiReducer, INITIAL_UI_STATE)
   const [settings, setSettings] = useState<GenerationSettings>(initialState.settings)
   const [seedText, setSeedText] = useState<string>(initialState.seedText)
@@ -126,7 +132,7 @@ function App() {
   const [undoGame, setUndoGame] = useState<GameState | null>(null)
   const [isControlPanelOpen, setControlPanelOpen] = useState(false)
   const [revealAnimation, setRevealAnimation] = useState<RevealAnimationState | null>(null)
-  const [isTutorialOpen, setTutorialOpen] = useState(true)
+  const [isTutorialOpen, setTutorialOpen] = useState(() => !loadHasSeenTutorial())
   const {
     progress: generationProgress,
     start: startBackgroundGeneration,
@@ -227,6 +233,10 @@ function App() {
   useEffect(() => {
     setStoredValue(SETTINGS_STORAGE_KEY, settings)
   }, [settings])
+
+  useEffect(() => {
+    setStoredValue(HAS_SEEN_TUTORIAL_STORAGE_KEY, hasSeenTutorial)
+  }, [hasSeenTutorial])
 
   useEffect(() => {
     if (uiState.debugToolsEnabled) return
@@ -358,6 +368,7 @@ function App() {
           onUndo={onUndo}
           onNewGame={onGenerateBoardQuick}
           onOpenSettings={() => setControlPanelOpen(true)}
+          onOpenTutorial={() => setTutorialOpen(true)}
         />
       ) : null}
       <ControlPanel
@@ -399,7 +410,13 @@ function App() {
         onReveal={onReveal}
         onRightClick={onRightClick}
       />
-      <TutorialModal isOpen={isTutorialOpen} onClose={() => setTutorialOpen(false)} />
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => {
+          setHasSeenTutorial(true)
+          setTutorialOpen(false)
+        }}
+      />
       {progressVisible ? (
         <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center">
           <div className="w-[min(92vw,460px)] rounded-xl border border-slate-300 bg-white/95 px-5 py-4 text-slate-800 shadow-2xl backdrop-blur-sm">

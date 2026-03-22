@@ -371,9 +371,18 @@ interface QuickButtonPanelProps {
   onUndo: () => void
   onNewGame: () => void
   onOpenSettings: () => void
+  onOpenTutorial: () => void
 }
 
-export function QuickButtonPanel({ game, canUndo, stage, onUndo, onNewGame, onOpenSettings }: QuickButtonPanelProps) {
+export function QuickButtonPanel({
+  game,
+  canUndo,
+  stage,
+  onUndo,
+  onNewGame,
+  onOpenSettings,
+  onOpenTutorial,
+}: QuickButtonPanelProps) {
   const flaggedCount = game ? game.cells.filter((cell) => cell.active && cell.flagged).length : 0
   const totalMines = game?.mineCount ?? 0
   const bombsRemaining = Math.max(0, totalMines - flaggedCount)
@@ -397,6 +406,15 @@ export function QuickButtonPanel({ game, canUndo, stage, onUndo, onNewGame, onOp
           className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Settings
+        </button>
+        <button
+          type="button"
+          onClick={onOpenTutorial}
+          aria-label="Open rules"
+          title="Open rules"
+          className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          ?
         </button>
         <button
           type="button"
